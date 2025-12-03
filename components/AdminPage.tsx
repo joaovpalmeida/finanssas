@@ -4,12 +4,13 @@ import { SqlConsole } from './SqlConsole';
 import { FileUpload } from './FileUpload';
 import { getAccounts, getCategories, updateAccount, updateCategory } from '../services/db';
 import { Account, Category } from '../types';
+import { ColumnMapping } from '../utils/excelParser';
 
 interface AdminPageProps {
   onBackup: () => void;
   onReset: () => void;
   onRefresh: () => void;
-  onUpload: (file: File, accountName: string) => void;
+  onUpload: (file: File, accountName: string, mapping: ColumnMapping) => void;
   isUploading: boolean;
   uploadError: string | null;
 }

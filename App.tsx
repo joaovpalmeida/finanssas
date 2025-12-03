@@ -5,7 +5,7 @@ import { Insights } from './components/Insights';
 import { AdminPage } from './components/AdminPage';
 import { SavingsGoals } from './components/SavingsGoals';
 import { AddTransactionModal } from './components/AddTransactionModal';
-import { parseExcelFile } from './utils/excelParser';
+import { parseExcelFile, ColumnMapping } from './utils/excelParser';
 import { Transaction, Account, Category } from './types';
 import { initDB, insertTransactions, getAllTransactions, resetDB, exportDatabaseBlob, deleteTransaction, getAccounts, getCategories } from './services/db';
 import { calculateRunningBalances, formatCurrency, aggregateData } from './utils/helpers';
@@ -52,17 +52,17 @@ function App() {
     return aggregateData(transactions, categories).accountBalances;
   }, [transactions, categories]);
 
-  const handleFileUpload = async (file: File, accountName: string) => {
+  const handleFileUpload = async (file: File, accountName: string, mapping: ColumnMapping) => {
     setIsLoading(true);
     setError(null);
     try {
-      const data = await parseExcelFile(file, accountName);
+      const data = await parseExcelFile(file, accountName, mapping);
       await insertTransactions(data); // Save to SQLite and auto-create categories/accounts
       refreshTransactions();
       alert(`Successfully imported ${data.length} transactions.`);
     } catch (err) {
       console.error(err);
-      setError("Failed to parse the file. Please ensure it's a valid Excel file with headers.");
+      setError("Failed to parse the file. Please ensure it's a valid Excel file and columns are mapped correctly.");
     } finally {
       setIsLoading(false);
     }

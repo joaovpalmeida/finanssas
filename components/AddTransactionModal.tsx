@@ -209,7 +209,7 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
                 className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none appearance-none bg-white"
               >
                 <option value="" disabled>Select a {formData.type.toLowerCase()} category</option>
-                {Object.entries(groupedCategories).map(([group, cats]) => (
+                {(Object.entries(groupedCategories) as [string, Category[]][]).map(([group, cats]) => (
                   cats.length > 0 && (
                     <optgroup key={group} label={group}>
                       {cats.map(c => (

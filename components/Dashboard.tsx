@@ -220,18 +220,18 @@ export const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, 
                       </div>
                       <div className="space-y-3">
                          {Object.entries(data.categories)
-                            .sort((a, b) => b[1] - a[1])
+                            .sort((a, b) => (b[1] as number) - (a[1] as number))
                             .map(([catName, amount], catIdx) => (
                               <div key={catName} className="relative">
                                 <div className="flex justify-between text-sm z-10 relative mb-1">
                                    <span className="text-slate-600">{catName}</span>
-                                   <span className="font-medium text-slate-700">{formatCurrency(amount)}</span>
+                                   <span className="font-medium text-slate-700">{formatCurrency(amount as number)}</span>
                                 </div>
                                 <div className="w-full bg-slate-50 rounded-full h-1.5 overflow-hidden">
                                    <div 
                                     className="h-full rounded-full"
                                     style={{ 
-                                      width: `${(amount / data.total) * 100}%`,
+                                      width: `${((amount as number) / data.total) * 100}%`,
                                       backgroundColor: COLORS[catIdx % COLORS.length]
                                     }}
                                    />
