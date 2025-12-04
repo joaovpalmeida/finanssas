@@ -163,7 +163,7 @@ export const SavingsGoals: React.FC<SavingsGoalsProps> = ({ accountBalances }) =
                 value={formData.name}
                 onChange={e => setFormData({...formData, name: e.target.value})}
                 placeholder="e.g. New Car"
-                className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white text-slate-800"
               />
             </div>
             <div>
@@ -174,7 +174,7 @@ export const SavingsGoals: React.FC<SavingsGoalsProps> = ({ accountBalances }) =
                 value={formData.targetAmount}
                 onChange={e => setFormData({...formData, targetAmount: e.target.value})}
                 placeholder="5000"
-                className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white text-slate-800"
               />
             </div>
             <div>
@@ -184,7 +184,7 @@ export const SavingsGoals: React.FC<SavingsGoalsProps> = ({ accountBalances }) =
                 required
                 value={formData.deadline}
                 onChange={e => setFormData({...formData, deadline: e.target.value})}
-                className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white text-slate-800"
               />
             </div>
             

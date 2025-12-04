@@ -155,7 +155,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                         value={apiKey}
                         onChange={(e) => setApiKey(e.target.value)}
                         placeholder="Enter Google API Key..."
-                        className="flex-1 px-3 py-2 border border-purple-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white"
+                        className="flex-1 px-3 py-2 border border-purple-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white text-slate-800"
                       />
                       <button 
                         onClick={handleSaveApiKey}
@@ -175,18 +175,18 @@ export const AdminPage: React.FC<AdminPageProps> = ({
 
           {/* Generate Dummy Data */}
           {dbCount === 0 && (
-             <div className="p-5 border border-indigo-200 rounded-xl bg-indigo-50/50 hover:border-indigo-300 transition-all">
+             <div className="p-5 border border-indigo-200 rounded-xl bg-indigo-50/50 hover:border-indigo-300 transition-all flex flex-col h-full">
                 <h3 className="font-semibold text-indigo-800 flex items-center mb-2">
                   <Wand2 className="w-4 h-4 mr-2 text-indigo-600" />
                   Demo Mode
                 </h3>
-                <p className="text-sm text-indigo-600/70 mb-4">
+                <p className="text-sm text-indigo-600/70 mb-4 flex-grow">
                   Database is empty. Generate sample data to test features.
                 </p>
                 <button 
                   onClick={handleGenerateData}
                   disabled={generating}
-                  className="px-4 py-2 bg-white border border-indigo-200 shadow-sm text-indigo-700 rounded-lg text-sm font-medium hover:bg-indigo-50 transition-colors w-full disabled:opacity-50"
+                  className="mt-auto px-4 py-2 bg-white border border-indigo-200 shadow-sm text-indigo-700 rounded-lg text-sm font-medium hover:bg-indigo-50 transition-colors w-full disabled:opacity-50"
                 >
                   {generating ? 'Generating...' : 'Populate Dummy Data'}
                 </button>
@@ -194,29 +194,29 @@ export const AdminPage: React.FC<AdminPageProps> = ({
           )}
 
           {/* Backup */}
-          <div className="p-5 border border-slate-200 rounded-xl bg-slate-50/50 hover:border-blue-300 transition-all">
+          <div className="p-5 border border-slate-200 rounded-xl bg-slate-50/50 hover:border-blue-300 transition-all flex flex-col h-full">
             <h3 className="font-semibold text-slate-800 flex items-center mb-2">
               <Download className="w-4 h-4 mr-2 text-blue-600" />
               Backup Data
             </h3>
-            <p className="text-sm text-slate-500 mb-4">
+            <p className="text-sm text-slate-500 mb-4 flex-grow">
               Download your entire database as a SQLite file. Safe for external storage.
             </p>
             <button 
               onClick={onBackup}
-              className="px-4 py-2 bg-white border border-slate-300 shadow-sm text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50 hover:text-blue-600 transition-colors w-full"
+              className="mt-auto px-4 py-2 bg-white border border-slate-300 shadow-sm text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50 hover:text-blue-600 transition-colors w-full"
             >
               Download Backup
             </button>
           </div>
 
           {/* Restore */}
-          <div className="p-5 border border-slate-200 rounded-xl bg-slate-50/50 hover:border-emerald-300 transition-all">
+          <div className="p-5 border border-slate-200 rounded-xl bg-slate-50/50 hover:border-emerald-300 transition-all flex flex-col h-full">
             <h3 className="font-semibold text-slate-800 flex items-center mb-2">
               <Upload className="w-4 h-4 mr-2 text-emerald-600" />
               Restore Database
             </h3>
-            <p className="text-sm text-slate-500 mb-4">
+            <p className="text-sm text-slate-500 mb-4 flex-grow">
               Load a previously saved .sqlite file. <span className="text-red-500 font-medium">Overwrites data.</span>
             </p>
             <input 
@@ -229,24 +229,24 @@ export const AdminPage: React.FC<AdminPageProps> = ({
             <button 
               onClick={handleRestoreClick}
               disabled={isUploading}
-              className="px-4 py-2 bg-white border border-slate-300 shadow-sm text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50 hover:text-emerald-600 transition-colors w-full"
+              className="mt-auto px-4 py-2 bg-white border border-slate-300 shadow-sm text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50 hover:text-emerald-600 transition-colors w-full"
             >
               Select File to Restore
             </button>
           </div>
 
           {/* Reset */}
-          <div className="p-5 border border-red-100 rounded-xl bg-red-50/30 hover:border-red-200 transition-all">
+          <div className="p-5 border border-red-100 rounded-xl bg-red-50/30 hover:border-red-200 transition-all flex flex-col h-full">
             <h3 className="font-semibold text-red-700 flex items-center mb-2">
               <Trash2 className="w-4 h-4 mr-2" />
               Factory Reset
             </h3>
-            <p className="text-sm text-red-600/70 mb-4">
+            <p className="text-sm text-red-600/70 mb-4 flex-grow">
               Permanently delete all transactions and reset the local database.
             </p>
             <button 
               onClick={() => { onReset(); setTimeout(refreshData, 500); }}
-              className="px-4 py-2 bg-white border border-red-200 shadow-sm text-red-600 rounded-lg text-sm font-medium hover:bg-red-50 transition-colors w-full"
+              className="mt-auto px-4 py-2 bg-white border border-red-200 shadow-sm text-red-600 rounded-lg text-sm font-medium hover:bg-red-50 transition-colors w-full"
             >
               Delete All Data
             </button>
@@ -332,7 +332,7 @@ const AccountList: React.FC<{
                {editingItem === acc.name ? (
                   <div className="flex items-center w-full space-x-2">
                     <input 
-                      className="flex-1 px-2 py-1 border rounded text-sm"
+                      className="flex-1 px-2 py-1 border rounded text-sm bg-white text-slate-800"
                       value={editValue}
                       onChange={e => setEditValue(e.target.value)}
                     />
@@ -389,7 +389,7 @@ const CategoryList: React.FC<{
                   <div className="space-y-2">
                     <div className="flex items-center space-x-2">
                       <input 
-                        className="flex-1 px-2 py-1 border rounded text-sm"
+                        className="flex-1 px-2 py-1 border rounded text-sm bg-white text-slate-800"
                         value={formData.name}
                         onChange={e => setFormData({...formData, name: e.target.value})}
                       />
@@ -398,7 +398,7 @@ const CategoryList: React.FC<{
                     </div>
                     <div className="flex space-x-2">
                        <select 
-                        className="flex-1 text-xs border rounded p-1"
+                        className="flex-1 text-xs border rounded p-1 bg-white text-slate-800"
                         value={formData.type}
                         onChange={e => setFormData({...formData, type: e.target.value})}
                        >
@@ -406,7 +406,7 @@ const CategoryList: React.FC<{
                          <option value="Income">Income</option>
                        </select>
                        <select 
-                        className="flex-1 text-xs border rounded p-1"
+                        className="flex-1 text-xs border rounded p-1 bg-white text-slate-800"
                         value={formData.group}
                         onChange={e => setFormData({...formData, group: e.target.value})}
                        >

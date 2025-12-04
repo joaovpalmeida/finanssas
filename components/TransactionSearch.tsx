@@ -91,7 +91,7 @@ export const TransactionSearch: React.FC<TransactionSearchProps> = ({ categories
                   value={filters.keyword}
                   onChange={e => setFilters({...filters, keyword: e.target.value})}
                   placeholder="Search description..."
-                  className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm"
+                  className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm bg-white text-slate-800"
                   onKeyDown={e => e.key === 'Enter' && handleSearch()}
                 />
              </div>
@@ -105,7 +105,7 @@ export const TransactionSearch: React.FC<TransactionSearchProps> = ({ categories
                 <select 
                   value={filters.category}
                   onChange={e => setFilters({...filters, category: e.target.value})}
-                  className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm appearance-none bg-white"
+                  className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm appearance-none bg-white text-slate-800"
                 >
                   <option value="">All Categories</option>
                   {categories.map(c => (
@@ -123,7 +123,7 @@ export const TransactionSearch: React.FC<TransactionSearchProps> = ({ categories
                 <select 
                   value={filters.account}
                   onChange={e => setFilters({...filters, account: e.target.value})}
-                  className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm appearance-none bg-white"
+                  className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm appearance-none bg-white text-slate-800"
                 >
                   <option value="">All Accounts</option>
                   {accounts.map(a => (
@@ -140,7 +140,7 @@ export const TransactionSearch: React.FC<TransactionSearchProps> = ({ categories
                type="date"
                value={filters.startDate}
                onChange={e => setFilters({...filters, startDate: e.target.value})}
-               className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm"
+               className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm bg-white text-slate-800"
              />
            </div>
            <div>
@@ -149,7 +149,7 @@ export const TransactionSearch: React.FC<TransactionSearchProps> = ({ categories
                type="date"
                value={filters.endDate}
                onChange={e => setFilters({...filters, endDate: e.target.value})}
-               className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm"
+               className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm bg-white text-slate-800"
              />
            </div>
 
@@ -159,7 +159,7 @@ export const TransactionSearch: React.FC<TransactionSearchProps> = ({ categories
              <select 
                 value={filters.type}
                 onChange={e => setFilters({...filters, type: e.target.value})}
-                className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm bg-white"
+                className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm bg-white text-slate-800"
              >
                 <option value="">All Types</option>
                 <option value="Income">Income</option>
