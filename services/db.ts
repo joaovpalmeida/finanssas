@@ -68,6 +68,11 @@ const initSchema = () => {
       type TEXT,
       group_name TEXT
     );
+
+    CREATE TABLE IF NOT EXISTS configs (
+      key TEXT PRIMARY KEY,
+      value TEXT
+    );
   `;
   db.run(sql);
   saveDB();
@@ -115,7 +120,15 @@ const migrateSchema = () => {
       );
     `);
 
-    // 4. Populate accounts from transactions if empty
+    // 4. Create configs table if it doesn't exist
+    db.run(`
+      CREATE TABLE IF NOT EXISTS configs (
+        key TEXT PRIMARY KEY,
+        value TEXT
+      );
+    `);
+
+    // 5. Populate accounts from transactions if empty
     const accountsCount = db.exec("SELECT count(*) FROM accounts")[0].values[0][0];
     if (accountsCount === 0) {
       const distinctAccounts = db.exec("SELECT DISTINCT account FROM transactions");
@@ -128,7 +141,7 @@ const migrateSchema = () => {
       }
     }
 
-    // 5. Populate categories from transactions if empty
+    // 6. Populate categories from transactions if empty
     const categoriesCount = db.exec("SELECT count(*) FROM categories")[0].values[0][0];
     if (categoriesCount === 0) {
       const distinctCats = db.exec("SELECT DISTINCT category, type FROM transactions");
@@ -163,6 +176,7 @@ export const resetDB = async () => {
   db.run("DELETE FROM savings_goals;");
   db.run("DELETE FROM accounts;");
   db.run("DELETE FROM categories;");
+  db.run("DELETE FROM configs;");
   await saveDB();
 };
 
@@ -569,6 +583,27 @@ export const renameCategory = async (oldName: string, newName: string) => {
 
 export const renameAccount = async (oldName: string, newName: string) => {
   await updateAccount(oldName, newName);
+}
+
+// --- Configs (API Keys) ---
+
+export const getApiKey = (): string | null => {
+  if (!db) return null;
+  try {
+    const res = db.exec("SELECT value FROM configs WHERE key = 'google_api_key'");
+    if (res.length > 0) {
+        return res[0].values[0][0];
+    }
+    return null;
+  } catch(e) {
+    return null;
+  }
+}
+
+export const saveApiKey = async (key: string) => {
+  if (!db) return;
+  db.run("INSERT OR REPLACE INTO configs (key, value) VALUES ('google_api_key', ?)", [key]);
+  await saveDB();
 }
 
 // --- Savings Goals ---

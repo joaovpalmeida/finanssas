@@ -57,17 +57,6 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
     return categories.filter(c => c.type === formData.type);
   }, [categories, formData.type]);
 
-  // Group filtered categories
-  const groupedCategories = useMemo(() => {
-    const grouped: Record<string, Category[]> = { 'Recurring': [], 'General': [] };
-    filteredCategories.forEach(c => {
-      const g = c.group || 'General';
-      if (!grouped[g]) grouped[g] = [];
-      grouped[g].push(c);
-    });
-    return grouped;
-  }, [filteredCategories]);
-
   if (!isOpen) return null;
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -197,36 +186,28 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
             </div>
           </div>
 
-          {/* Category (Filtered Selection) */}
+          {/* Category (Filtered Selection or New) */}
           <div>
             <label className="block text-xs font-semibold text-slate-500 mb-1">Category</label>
             <div className="relative">
               <Tag className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
-              <select
+              <input
+                type="text"
                 required
+                list="category-list"
                 value={formData.category}
                 onChange={e => setFormData({ ...formData, category: e.target.value })}
-                className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none appearance-none bg-white"
-              >
-                <option value="" disabled>Select a {formData.type.toLowerCase()} category</option>
-                {(Object.entries(groupedCategories) as [string, Category[]][]).map(([group, cats]) => (
-                  cats.length > 0 && (
-                    <optgroup key={group} label={group}>
-                      {cats.map(c => (
-                        <option key={c.id} value={c.name}>{c.name}</option>
-                      ))}
-                    </optgroup>
-                  )
+                className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white"
+                placeholder="Select or type new category..."
+              />
+              <datalist id="category-list">
+                {filteredCategories.map(c => (
+                  <option key={c.id} value={c.name} />
                 ))}
-              </select>
-              {/* Fallback for adding new categories on the fly - simple text input toggle could be added here, 
-                  but for strict typing we use the Admin panel to define new ones or let Excel import handle it.
-                  However, to allow custom entry we can keep a datalist approach or use a creature/select.
-                  Given the requirement "filter which type of category I can select", a strict select is better.
-              */}
+              </datalist>
             </div>
              <p className="text-[10px] text-slate-400 mt-1">
-               Only showing {formData.type} categories. Manage them in Admin tab.
+               Showing {formData.type.toLowerCase()} categories. Typing a new one will create it automatically.
              </p>
           </div>
 

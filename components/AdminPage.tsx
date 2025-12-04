@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Download, Trash2, Settings, Tag, CreditCard, Edit2, Save, X, UploadCloud, AlertTriangle, Upload, Wand2 } from 'lucide-react';
+import { Download, Trash2, Settings, Tag, CreditCard, Edit2, Save, X, UploadCloud, AlertTriangle, Upload, Wand2, Key } from 'lucide-react';
 import { SqlConsole } from './SqlConsole';
 import { FileUpload } from './FileUpload';
-import { getAccounts, getCategories, updateAccount, updateCategory, deleteCategory, deleteAccount, getTransactionCount, generateDummyData } from '../services/db';
+import { getAccounts, getCategories, updateAccount, updateCategory, deleteCategory, deleteAccount, getTransactionCount, generateDummyData, getApiKey, saveApiKey } from '../services/db';
 import { Account, Category, Transaction } from '../types';
 
 interface AdminPageProps {
@@ -29,12 +29,24 @@ export const AdminPage: React.FC<AdminPageProps> = ({
   const [showImport, setShowImport] = useState(false);
   const [dbCount, setDbCount] = useState(0);
   const [generating, setGenerating] = useState(false);
+  
+  // API Key State
+  const [apiKey, setApiKey] = useState('');
+  const [isKeySaved, setIsKeySaved] = useState(false);
+
   const restoreInputRef = useRef<HTMLInputElement>(null);
 
   const refreshData = () => {
     setAccounts(getAccounts());
     setCategories(getCategories());
     setDbCount(getTransactionCount());
+    
+    const key = getApiKey();
+    if (key) {
+        setApiKey(key);
+        setIsKeySaved(true);
+    }
+
     onRefresh();
   };
 
@@ -64,6 +76,18 @@ export const AdminPage: React.FC<AdminPageProps> = ({
       alert("Failed to generate data.");
     } finally {
       setGenerating(false);
+    }
+  };
+
+  const handleSaveApiKey = async () => {
+    if (!apiKey.trim()) return;
+    try {
+        await saveApiKey(apiKey);
+        setIsKeySaved(true);
+        alert("API Key saved successfully.");
+    } catch (e) {
+        console.error(e);
+        alert("Failed to save API Key");
     }
   };
 
@@ -101,7 +125,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
         )}
       </div>
 
-      {/* Management Section */}
+      {/* Configuration Section */}
       <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
         <div className="flex items-center space-x-3 mb-6 border-b border-slate-100 pb-4">
           <div className="p-2 bg-slate-100 rounded-lg">
@@ -113,21 +137,56 @@ export const AdminPage: React.FC<AdminPageProps> = ({
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6">
-          {/* Generate Dummy Data - Only if DB is empty or nearly empty */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          
+           {/* API Key Config */}
+           <div className="p-5 border border-purple-200 rounded-xl bg-purple-50/50 hover:border-purple-300 transition-all col-span-1 md:col-span-2 lg:col-span-4">
+                <div className="max-w-3xl">
+                  <h3 className="font-semibold text-purple-800 flex items-center mb-2">
+                    <Key className="w-4 h-4 mr-2 text-purple-600" />
+                    Google Gemini API
+                  </h3>
+                  <p className="text-sm text-purple-600/70 mb-4">
+                    Enter your API Key to enable AI Insights and Chat. The key is stored locally in your database.
+                  </p>
+                  <div className="flex space-x-2">
+                      <input 
+                        type="password"
+                        value={apiKey}
+                        onChange={(e) => setApiKey(e.target.value)}
+                        placeholder="Enter Google API Key..."
+                        className="flex-1 px-3 py-2 border border-purple-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white"
+                      />
+                      <button 
+                        onClick={handleSaveApiKey}
+                        className="px-4 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700 transition-colors"
+                      >
+                        {isKeySaved ? 'Update' : 'Save'}
+                      </button>
+                  </div>
+                  {isKeySaved && (
+                      <p className="text-xs text-emerald-600 mt-2 flex items-center">
+                          <span className="w-2 h-2 bg-emerald-500 rounded-full mr-1.5"></span>
+                          Key is configured
+                      </p>
+                  )}
+                </div>
+           </div>
+
+          {/* Generate Dummy Data */}
           {dbCount === 0 && (
-             <div className="p-5 border border-purple-200 rounded-xl bg-purple-50/50 hover:border-purple-300 transition-all">
-                <h3 className="font-semibold text-purple-800 flex items-center mb-2">
-                  <Wand2 className="w-4 h-4 mr-2 text-purple-600" />
+             <div className="p-5 border border-indigo-200 rounded-xl bg-indigo-50/50 hover:border-indigo-300 transition-all">
+                <h3 className="font-semibold text-indigo-800 flex items-center mb-2">
+                  <Wand2 className="w-4 h-4 mr-2 text-indigo-600" />
                   Demo Mode
                 </h3>
-                <p className="text-sm text-purple-600/70 mb-4 min-h-[40px]">
-                  Database is empty. Generate realistic sample data to test features.
+                <p className="text-sm text-indigo-600/70 mb-4">
+                  Database is empty. Generate sample data to test features.
                 </p>
                 <button 
                   onClick={handleGenerateData}
                   disabled={generating}
-                  className="px-4 py-2 bg-white border border-purple-200 shadow-sm text-purple-700 rounded-lg text-sm font-medium hover:bg-purple-50 transition-colors w-full disabled:opacity-50"
+                  className="px-4 py-2 bg-white border border-indigo-200 shadow-sm text-indigo-700 rounded-lg text-sm font-medium hover:bg-indigo-50 transition-colors w-full disabled:opacity-50"
                 >
                   {generating ? 'Generating...' : 'Populate Dummy Data'}
                 </button>
@@ -140,7 +199,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
               <Download className="w-4 h-4 mr-2 text-blue-600" />
               Backup Data
             </h3>
-            <p className="text-sm text-slate-500 mb-4 min-h-[40px]">
+            <p className="text-sm text-slate-500 mb-4">
               Download your entire database as a SQLite file. Safe for external storage.
             </p>
             <button 
@@ -157,8 +216,8 @@ export const AdminPage: React.FC<AdminPageProps> = ({
               <Upload className="w-4 h-4 mr-2 text-emerald-600" />
               Restore Database
             </h3>
-            <p className="text-sm text-slate-500 mb-4 min-h-[40px]">
-              Load a previously saved .sqlite file. <span className="text-red-500 font-medium">Overwrites current data.</span>
+            <p className="text-sm text-slate-500 mb-4">
+              Load a previously saved .sqlite file. <span className="text-red-500 font-medium">Overwrites data.</span>
             </p>
             <input 
               type="file" 
@@ -182,7 +241,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
               <Trash2 className="w-4 h-4 mr-2" />
               Factory Reset
             </h3>
-            <p className="text-sm text-red-600/70 mb-4 min-h-[40px]">
+            <p className="text-sm text-red-600/70 mb-4">
               Permanently delete all transactions and reset the local database.
             </p>
             <button 

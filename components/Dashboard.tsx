@@ -108,7 +108,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, 
         <div className="bg-blue-100 p-4 rounded-full mb-6">
           <Wallet className="w-12 h-12 text-blue-600" />
         </div>
-        <h2 className="text-2xl font-bold text-slate-800 mb-2">Welcome to FinanceAI</h2>
+        <h2 className="text-2xl font-bold text-slate-800 mb-2">Welcome to Finan$$as</h2>
         <p className="text-slate-500 max-w-md mb-8">
           You don't have any transactions yet. Import your Excel/CSV files in the Admin section or add a transaction manually to get started.
         </p>

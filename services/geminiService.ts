@@ -1,16 +1,25 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { Transaction, AiInsight } from "../types";
+import { getApiKey } from "./db";
 
-const apiKey = process.env.API_KEY;
-
-// Initialize the client only if the key exists, otherwise we handle it gracefully in the app
-const ai = apiKey ? new GoogleGenAI({ apiKey }) : null;
+// Helper to get a configured AI client
+// We prioritize process.env for development/build-time keys, then fall back to DB config
+const getAIClient = () => {
+  const envKey = process.env.API_KEY;
+  const dbKey = getApiKey();
+  const key = envKey || dbKey;
+  
+  if (!key) return null;
+  return new GoogleGenAI({ apiKey: key });
+};
 
 export const getFinancialInsights = async (transactions: Transaction[]): Promise<AiInsight[]> => {
+  const ai = getAIClient();
+  
   if (!ai) {
     return [{
       title: "API Key Missing",
-      content: "Please provide a valid API_KEY in the environment to generate AI insights.",
+      content: "Please configure your Google API Key in the Admin section to generate AI insights.",
       type: "neutral"
     }];
   }
@@ -59,7 +68,7 @@ export const getFinancialInsights = async (transactions: Transaction[]): Promise
     console.error("Error generating insights:", error);
     return [{
       title: "Analysis Failed",
-      content: "Could not generate insights at this time. Please try again later.",
+      content: "Could not generate insights at this time. Please check your API key and quota.",
       type: "negative"
     }];
   }
@@ -69,7 +78,8 @@ export const chatWithFinanceData = async (
   query: string, 
   transactions: Transaction[]
 ): Promise<string> => {
-  if (!ai) return "API Key not configured.";
+  const ai = getAIClient();
+  if (!ai) return "API Key not configured. Please add it in the Admin settings.";
 
   // Providing a simplified context
   const summary = transactions.slice(0, 100).map(t => 
@@ -92,6 +102,6 @@ export const chatWithFinanceData = async (
     return response.text || "I couldn't generate an answer.";
   } catch (e) {
     console.error(e);
-    return "Sorry, I had trouble analyzing that request.";
+    return "Sorry, I had trouble analyzing that request. Check your API Key.";
   }
 };
