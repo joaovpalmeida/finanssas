@@ -1,9 +1,9 @@
 import React, { useCallback, useState } from 'react';
-import { Upload, FileSpreadsheet, Loader2, AlertCircle, ArrowRight, Settings } from 'lucide-react';
-import { getExcelHeaders, ColumnMapping } from '../utils/excelParser';
+import { Upload, FileSpreadsheet, Loader2, AlertCircle, ArrowRight, Settings, Layers, ChevronRight, ArrowLeft, Table, Calendar } from 'lucide-react';
+import { getExcelColumns, getExcelSheetNames, ColumnMapping, ExcelColumn } from '../utils/excelParser';
 
 interface FileUploadProps {
-  onUpload: (file: File, accountName: string, mapping: ColumnMapping) => void;
+  onUpload: (file: File, accountName: string, mapping: ColumnMapping, sheetName: string, defaultDate: string) => void;
   isLoading: boolean;
   error?: string | null;
 }
@@ -11,9 +11,14 @@ interface FileUploadProps {
 export const FileUpload: React.FC<FileUploadProps> = ({ onUpload, isLoading, error }) => {
   const [isDragging, setIsDragging] = useState(false);
   const [accountName, setAccountName] = useState('Main Account');
-  const [step, setStep] = useState<'upload' | 'mapping'>('upload');
+  const [defaultDate, setDefaultDate] = useState(new Date().toISOString().split('T')[0]);
+  
+  const [step, setStep] = useState<'upload' | 'sheet-selection' | 'mapping'>('upload');
+  
   const [file, setFile] = useState<File | null>(null);
-  const [headers, setHeaders] = useState<string[]>([]);
+  const [columns, setColumns] = useState<ExcelColumn[]>([]);
+  const [sheets, setSheets] = useState<string[]>([]);
+  const [selectedSheet, setSelectedSheet] = useState<string>('');
   
   const [mapping, setMapping] = useState<ColumnMapping>({
     date: '',
@@ -32,25 +37,50 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onUpload, isLoading, err
     setIsDragging(false);
   }, []);
 
-  const processFileSelection = async (selectedFile: File) => {
+  const guessMapping = (cols: ExcelColumn[]): ColumnMapping => {
+    const findIndex = (regex: RegExp) => {
+      // Defensive check for undefined cols or headers
+      if (!cols) return '';
+      const match = cols.find(c => c.header && regex.test(c.header));
+      return match ? String(match.index) : '';
+    };
+
+    return {
+      date: findIndex(/date/i),
+      description: findIndex(/description|desc|name/i),
+      amount: findIndex(/amount|value|cost/i),
+      category: findIndex(/category|type/i),
+      account: findIndex(/account|bank|source/i)
+    };
+  };
+
+  const loadSheetColumns = async (fileToLoad: File, sheetName: string) => {
     try {
-      const fileHeaders = await getExcelHeaders(selectedFile);
-      setHeaders(fileHeaders);
-      setFile(selectedFile);
-      
-      // Auto-guess mapping
-      const lowerHeaders = fileHeaders.map(h => h.toLowerCase());
-      const guess = {
-        date: fileHeaders.find(h => h.toLowerCase().includes('date')) || '',
-        description: fileHeaders.find(h => /description|desc|name/i.test(h)) || '',
-        amount: fileHeaders.find(h => /amount|value|cost/i.test(h)) || '',
-        category: fileHeaders.find(h => /category|type/i.test(h)) || '',
-        account: fileHeaders.find(h => /account|bank|source/i.test(h)) || ''
-      };
-      setMapping(guess);
+      const cols = await getExcelColumns(fileToLoad, sheetName);
+      setColumns(cols);
+      setMapping(guessMapping(cols));
       setStep('mapping');
     } catch (e) {
-      console.error("Failed to read headers", e);
+      console.error("Failed to read sheet columns", e);
+    }
+  };
+
+  const processFileSelection = async (selectedFile: File) => {
+    try {
+      const sheetNames = await getExcelSheetNames(selectedFile);
+      setSheets(sheetNames);
+      setFile(selectedFile);
+
+      if (sheetNames.length > 1) {
+        setSelectedSheet(sheetNames[0]);
+        setStep('sheet-selection');
+      } else {
+        const singleSheet = sheetNames[0] || '';
+        setSelectedSheet(singleSheet);
+        await loadSheetColumns(selectedFile, singleSheet);
+      }
+    } catch (e) {
+      console.error("Failed to read file", e);
     }
   };
 
@@ -68,117 +98,204 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onUpload, isLoading, err
     }
   }, []);
 
+  const handleSheetConfirm = async () => {
+    if (file && selectedSheet) {
+      await loadSheetColumns(file, selectedSheet);
+    }
+  };
+
   const handleConfirmImport = () => {
-    if (file && mapping.amount && mapping.date) {
-      onUpload(file, accountName, mapping);
-      // Reset after upload trigger (loading state handled by parent)
+    if (file && mapping.amount && (mapping.date || defaultDate)) {
+      onUpload(file, accountName, mapping, selectedSheet, defaultDate);
     }
   };
 
   const cancelUpload = () => {
     setStep('upload');
     setFile(null);
-    setHeaders([]);
+    setColumns([]);
+    setSheets([]);
+    setMapping({ date: '', description: '', amount: '', category: '' });
   };
 
-  if (step === 'mapping') {
+  // Render Helpers
+  const renderColumnSelect = (
+    label: string, 
+    value: string, 
+    onChange: (val: string) => void,
+    required = false
+  ) => (
+    <div>
+      <label className="block text-xs font-semibold text-slate-500 mb-1">
+        {label} {required && '*'}
+      </label>
+      <select 
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white text-sm"
+      >
+        <option value="">{required ? 'Select Column...' : '(None)'}</option>
+        {columns.map(col => (
+          <option key={col.index} value={col.index}>
+            Column {col.letter} {col.header ? `— ${col.header}` : ''}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+
+  // Step 2: Sheet Selection
+  if (step === 'sheet-selection') {
     return (
-      <div className="w-full max-w-2xl mx-auto p-6 bg-slate-50 rounded-xl border border-slate-200">
-        <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center">
-          <Settings className="w-5 h-5 mr-2 text-blue-600" />
-          Map Excel Columns
+      <div className="w-full max-w-2xl mx-auto p-6 bg-slate-50 rounded-xl border border-slate-200 animate-fade-in">
+        <h3 className="text-lg font-bold text-slate-800 mb-2 flex items-center">
+          <Layers className="w-5 h-5 mr-2 text-blue-600" />
+          Select Worksheet
         </h3>
         <p className="text-sm text-slate-500 mb-6">
-          Match the columns from your file <strong>{file?.name}</strong> to the required fields.
+          File: <strong>{file?.name}</strong> contains multiple sheets. Which one has the transaction data?
         </p>
 
-        <div className="space-y-4 mb-8">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-             <div>
-               <label className="block text-xs font-semibold text-slate-500 mb-1">Date Column *</label>
-               <select 
-                 value={mapping.date}
-                 onChange={(e) => setMapping({...mapping, date: e.target.value})}
-                 className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"
-               >
-                 <option value="">Select Column...</option>
-                 {headers.map(h => <option key={h} value={h}>{h}</option>)}
-               </select>
-             </div>
-             <div>
-               <label className="block text-xs font-semibold text-slate-500 mb-1">Amount Column *</label>
-               <select 
-                 value={mapping.amount}
-                 onChange={(e) => setMapping({...mapping, amount: e.target.value})}
-                 className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"
-               >
-                 <option value="">Select Column...</option>
-                 {headers.map(h => <option key={h} value={h}>{h}</option>)}
-               </select>
-             </div>
-             <div>
-               <label className="block text-xs font-semibold text-slate-500 mb-1">Description Column</label>
-               <select 
-                 value={mapping.description}
-                 onChange={(e) => setMapping({...mapping, description: e.target.value})}
-                 className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"
-               >
-                 <option value="">(None)</option>
-                 {headers.map(h => <option key={h} value={h}>{h}</option>)}
-               </select>
-             </div>
-             <div>
-               <label className="block text-xs font-semibold text-slate-500 mb-1">Category Column</label>
-               <select 
-                 value={mapping.category}
-                 onChange={(e) => setMapping({...mapping, category: e.target.value})}
-                 className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"
-               >
-                 <option value="">(None)</option>
-                 {headers.map(h => <option key={h} value={h}>{h}</option>)}
-               </select>
-             </div>
-             <div className="md:col-span-2 border-t border-slate-200 pt-4 mt-2">
-               <label className="block text-xs font-semibold text-slate-500 mb-1">Account Column (Optional)</label>
-               <div className="flex gap-4">
-                 <select 
-                   value={mapping.account || ''}
-                   onChange={(e) => setMapping({...mapping, account: e.target.value})}
-                   className="flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"
-                 >
-                   <option value="">(Use Default Name)</option>
-                   {headers.map(h => <option key={h} value={h}>{h}</option>)}
-                 </select>
-                 <input 
-                    type="text"
-                    value={accountName}
-                    onChange={(e) => setAccountName(e.target.value)}
-                    placeholder="Default Name"
-                    className="flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"
-                    disabled={!!mapping.account}
-                 />
-               </div>
-               <p className="text-[10px] text-slate-400 mt-1">
-                 If "Account Column" is selected, the Default Name will be ignored.
-               </p>
-             </div>
-          </div>
+        <div className="space-y-3 mb-8 max-h-60 overflow-y-auto">
+          {sheets.map((sheet) => (
+            <div 
+              key={sheet}
+              onClick={() => setSelectedSheet(sheet)}
+              className={`
+                flex items-center justify-between p-4 rounded-lg border cursor-pointer transition-all
+                ${selectedSheet === sheet 
+                  ? 'bg-white border-blue-500 shadow-md ring-1 ring-blue-500' 
+                  : 'bg-white border-slate-200 hover:border-blue-300 hover:bg-slate-50'
+                }
+              `}
+            >
+              <div className="flex items-center space-x-3">
+                <div className={`p-2 rounded-full ${selectedSheet === sheet ? 'bg-blue-100 text-blue-600' : 'bg-slate-100 text-slate-500'}`}>
+                  <Table className="w-4 h-4" />
+                </div>
+                <span className={`font-medium ${selectedSheet === sheet ? 'text-slate-800' : 'text-slate-600'}`}>
+                  {sheet}
+                </span>
+              </div>
+              {selectedSheet === sheet && <div className="w-3 h-3 bg-blue-500 rounded-full" />}
+            </div>
+          ))}
         </div>
 
-        <div className="flex justify-end space-x-3">
-          <button 
+        <div className="flex justify-between pt-4 border-t border-slate-200">
+           <button 
             onClick={cancelUpload}
-            className="px-4 py-2 text-slate-600 font-medium hover:bg-slate-200 rounded-lg transition-colors"
+            className="text-slate-500 hover:text-slate-700 font-medium text-sm px-4 py-2"
           >
             Cancel
           </button>
           <button 
+            onClick={handleSheetConfirm}
+            className="flex items-center px-6 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors shadow-sm"
+          >
+            Next: Map Columns <ChevronRight className="w-4 h-4 ml-1" />
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Step 3: Column Mapping
+  if (step === 'mapping') {
+    return (
+      <div className="w-full max-w-2xl mx-auto p-6 bg-slate-50 rounded-xl border border-slate-200 animate-fade-in">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-bold text-slate-800 flex items-center">
+            <Settings className="w-5 h-5 mr-2 text-blue-600" />
+            Map Columns
+          </h3>
+          <span className="text-xs bg-slate-200 text-slate-600 px-2 py-1 rounded">
+            Sheet: {selectedSheet}
+          </span>
+        </div>
+        
+        <p className="text-sm text-slate-500 mb-6">
+          Match the Excel columns to the correct fields. 
+        </p>
+
+        <div className="space-y-4 mb-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+             {renderColumnSelect("Amount Column", mapping.amount, v => setMapping({...mapping, amount: v}), true)}
+             {renderColumnSelect("Description Column", mapping.description, v => setMapping({...mapping, description: v}))}
+             {renderColumnSelect("Category Column", mapping.category, v => setMapping({...mapping, category: v}))}
+             
+             {/* Date Logic - Mapped OR Default */}
+             <div className="md:col-span-2 border-t border-slate-200 pt-4 mt-2">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {renderColumnSelect("Date Column", mapping.date, v => setMapping({...mapping, date: v}))}
+                  
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-500 mb-1">
+                      Default Date (Fallback)
+                    </label>
+                    <div className="relative">
+                       <Calendar className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
+                       <input 
+                         type="date"
+                         value={defaultDate}
+                         onChange={(e) => setDefaultDate(e.target.value)}
+                         className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white text-sm"
+                       />
+                    </div>
+                    <p className="text-[10px] text-slate-400 mt-1">
+                      Used if the Date Column is unmapped or a row has a missing date.
+                    </p>
+                  </div>
+                </div>
+             </div>
+
+             <div className="md:col-span-2 border-t border-slate-200 pt-4 mt-2">
+               <label className="block text-xs font-semibold text-slate-500 mb-1">Account Column (Optional)</label>
+               <div className="flex gap-4">
+                 <div className="flex-1">
+                   <select 
+                     value={mapping.account || ''}
+                     onChange={(e) => setMapping({...mapping, account: e.target.value})}
+                     className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white text-sm"
+                   >
+                     <option value="">(Use Default Name)</option>
+                     {columns.map(col => (
+                       <option key={col.index} value={col.index}>
+                         Column {col.letter} {col.header ? `— ${col.header}` : ''}
+                       </option>
+                     ))}
+                   </select>
+                 </div>
+                 <input 
+                    type="text"
+                    value={accountName}
+                    onChange={(e) => setAccountName(e.target.value)}
+                    placeholder="Default Name (e.g. Chase)"
+                    className="flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white text-sm"
+                    disabled={!!mapping.account}
+                 />
+               </div>
+             </div>
+          </div>
+        </div>
+
+        <div className="flex justify-between pt-4 border-t border-slate-200">
+           <button 
+            onClick={() => {
+              if (sheets.length > 1) setStep('sheet-selection');
+              else cancelUpload();
+            }}
+            className="flex items-center text-slate-500 hover:text-slate-700 font-medium text-sm px-4 py-2"
+          >
+            <ArrowLeft className="w-4 h-4 mr-1" /> Back
+          </button>
+          <button 
             onClick={handleConfirmImport}
-            disabled={!mapping.date || !mapping.amount || isLoading}
+            disabled={!mapping.amount || (!mapping.date && !defaultDate) || isLoading}
             className="flex items-center px-6 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Upload className="w-4 h-4 mr-2" />}
-            Import Transactions
+            Import Data
           </button>
         </div>
         {error && (
@@ -191,6 +308,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onUpload, isLoading, err
     );
   }
 
+  // Step 1: File Upload
   return (
     <div className="w-full max-w-2xl mx-auto p-6">
       <div
@@ -219,7 +337,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onUpload, isLoading, err
               {isLoading ? 'Processing...' : 'Upload your Excel File'}
             </h3>
             <p className="text-slate-500 max-w-sm mx-auto">
-              Drag and drop your .xlsx or .csv file here. You will be able to map columns in the next step.
+              Drag and drop your .xlsx or .csv file here.
             </p>
           </div>
 
@@ -245,13 +363,6 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onUpload, isLoading, err
             </div>
           )}
         </div>
-      </div>
-      
-      <div className="mt-8 text-center">
-        <p className="text-sm text-slate-400">
-          Privacy Note: Your file is processed locally in your browser. 
-          Only summarized data snippets are sent to AI for insights.
-        </p>
       </div>
     </div>
   );

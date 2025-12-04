@@ -10,7 +10,7 @@ interface AdminPageProps {
   onBackup: () => void;
   onReset: () => void;
   onRefresh: () => void;
-  onUpload: (file: File, accountName: string, mapping: ColumnMapping) => void;
+  onUpload: (file: File, accountName: string, mapping: ColumnMapping, sheetName: string, defaultDate: string) => void;
   isUploading: boolean;
   uploadError: string | null;
 }

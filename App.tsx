@@ -52,14 +52,14 @@ function App() {
     return aggregateData(transactions, categories).accountBalances;
   }, [transactions, categories]);
 
-  const handleFileUpload = async (file: File, accountName: string, mapping: ColumnMapping) => {
+  const handleFileUpload = async (file: File, accountName: string, mapping: ColumnMapping, sheetName: string, defaultDate: string) => {
     setIsLoading(true);
     setError(null);
     try {
-      const data = await parseExcelFile(file, accountName, mapping);
+      const data = await parseExcelFile(file, accountName, mapping, sheetName, defaultDate);
       await insertTransactions(data); // Save to SQLite and auto-create categories/accounts
       refreshTransactions();
-      alert(`Successfully imported ${data.length} transactions.`);
+      alert(`Successfully imported ${data.length} transactions from sheet "${sheetName}".`);
     } catch (err) {
       console.error(err);
       setError("Failed to parse the file. Please ensure it's a valid Excel file and columns are mapped correctly.");
