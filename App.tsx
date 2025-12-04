@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Wallet, Loader2, Plus, Settings, Target, Search, Home } from 'lucide-react';
+import { Wallet, Loader2, Plus, Settings, Target, Search, Home, Menu, X, BarChart3, Sparkles } from 'lucide-react';
 import { Dashboard } from './components/Dashboard';
 import { Insights } from './components/Insights';
 import { AdminPage } from './components/AdminPage';
@@ -26,6 +26,7 @@ function App() {
   
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   useEffect(() => {
     const setupDB = async () => {
@@ -130,6 +131,14 @@ function App() {
     }
   };
 
+  const navItems = [
+    { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
+    { id: 'search', label: 'Search', icon: Search },
+    { id: 'insights', label: 'AI Insights', icon: Sparkles },
+    { id: 'savings', label: 'Goals', icon: Target },
+    { id: 'admin', label: 'Admin', icon: Settings },
+  ] as const;
+
   if (!isDbReady) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center flex-col">
@@ -144,9 +153,14 @@ function App() {
       {/* Header */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm/50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+          
+          {/* Logo */}
           <div 
             className="flex items-center space-x-2 cursor-pointer group"
-            onClick={() => setActiveTab('landing')}
+            onClick={() => {
+              setActiveTab('landing');
+              setIsMobileMenuOpen(false);
+            }}
           >
             <div className="bg-blue-600 p-2 rounded-lg group-hover:bg-blue-700 transition-colors">
               <Wallet className="w-5 h-5 text-white" />
@@ -156,49 +170,27 @@ function App() {
             </h1>
           </div>
           
-          <div className="flex items-center space-x-1 lg:space-x-2 overflow-x-auto no-scrollbar ml-4">
-              {/* Home Icon for small screens or quick access */}
-              <button 
+          {/* Desktop Navigation */}
+          <div className="hidden lg:flex items-center space-x-2 ml-8">
+            <button 
                 onClick={() => setActiveTab('landing')}
-                className={`lg:hidden px-3 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${activeTab === 'landing' ? 'bg-slate-100 text-blue-700' : 'text-slate-600 hover:bg-slate-50'}`}
+                className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center ${activeTab === 'landing' ? 'bg-slate-100 text-blue-700' : 'text-slate-600 hover:bg-slate-50'}`}
               >
-                <Home className="w-4 h-4" />
-              </button>
-
-              <button 
-              onClick={() => setActiveTab('dashboard')}
-              className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${activeTab === 'dashboard' ? 'bg-slate-100 text-blue-700' : 'text-slate-600 hover:bg-slate-50'}`}
-            >
-              Dashboard
-            </button>
-            <button 
-              onClick={() => setActiveTab('search')}
-              className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center whitespace-nowrap ${activeTab === 'search' ? 'bg-slate-100 text-blue-700' : 'text-slate-600 hover:bg-slate-50'}`}
-            >
-              <Search className="w-3 h-3 mr-1.5 hidden md:block" />
-              Search
-            </button>
-            <button 
-              onClick={() => setActiveTab('insights')}
-              className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${activeTab === 'insights' ? 'bg-slate-100 text-blue-700' : 'text-slate-600 hover:bg-slate-50'}`}
-            >
-              AI Insights
-            </button>
-              <button 
-              onClick={() => setActiveTab('savings')}
-              className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center whitespace-nowrap ${activeTab === 'savings' ? 'bg-slate-100 text-blue-700' : 'text-slate-600 hover:bg-slate-50'}`}
-            >
-              <Target className="w-3 h-3 mr-1.5 hidden md:block" />
-              Goals
-            </button>
-            <button 
-              onClick={() => setActiveTab('admin')}
-              className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center whitespace-nowrap ${activeTab === 'admin' ? 'bg-slate-100 text-blue-700' : 'text-slate-600 hover:bg-slate-50'}`}
-            >
-              <Settings className="w-3 h-3 mr-1.5 hidden md:block" />
-              Admin
+                <Home className="w-4 h-4 mr-1.5" />
+                Home
             </button>
             
+            {navItems.map(item => (
+              <button 
+                key={item.id}
+                onClick={() => setActiveTab(item.id)}
+                className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center ${activeTab === item.id ? 'bg-slate-100 text-blue-700' : 'text-slate-600 hover:bg-slate-50'}`}
+              >
+                <item.icon className="w-4 h-4 mr-1.5" />
+                {item.label}
+              </button>
+            ))}
+
             <div className="h-6 w-px bg-slate-200 mx-2"></div>
             
             <button
@@ -206,13 +198,60 @@ function App() {
                 setEditingTransaction(null);
                 setIsModalOpen(true);
               }}
+              className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm text-sm font-medium"
+            >
+              <Plus className="w-4 h-4 mr-1.5" />
+              Add Transaction
+            </button>
+          </div>
+
+          {/* Mobile Controls */}
+          <div className="flex lg:hidden items-center space-x-3">
+             <button
+              onClick={() => {
+                setEditingTransaction(null);
+                setIsModalOpen(true);
+                setIsMobileMenuOpen(false);
+              }}
               className="flex items-center px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm text-sm font-medium"
             >
-              <Plus className="w-4 h-4 md:mr-1.5" />
-              <span className="hidden md:inline">Add</span>
+              <Plus className="w-4 h-4 mr-1.5" />
+              Add
+            </button>
+            
+            <button
+              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+              className="p-2 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+            >
+               {isMobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
             </button>
           </div>
         </div>
+
+        {/* Mobile Menu Dropdown */}
+        {isMobileMenuOpen && (
+          <div className="lg:hidden absolute top-16 left-0 w-full bg-white border-b border-slate-200 shadow-lg animate-fade-in z-40">
+            <div className="p-4 space-y-2">
+               <button 
+                  onClick={() => { setActiveTab('landing'); setIsMobileMenuOpen(false); }}
+                  className={`w-full px-4 py-3 rounded-xl text-base font-medium transition-colors flex items-center ${activeTab === 'landing' ? 'bg-blue-50 text-blue-700' : 'text-slate-700 hover:bg-slate-50'}`}
+                >
+                  <Home className="w-5 h-5 mr-3" />
+                  Home
+              </button>
+              {navItems.map(item => (
+                <button 
+                  key={item.id}
+                  onClick={() => { setActiveTab(item.id); setIsMobileMenuOpen(false); }}
+                  className={`w-full px-4 py-3 rounded-xl text-base font-medium transition-colors flex items-center ${activeTab === item.id ? 'bg-blue-50 text-blue-700' : 'text-slate-700 hover:bg-slate-50'}`}
+                >
+                  <item.icon className="w-5 h-5 mr-3" />
+                  {item.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </header>
 
       {/* Main Content */}
