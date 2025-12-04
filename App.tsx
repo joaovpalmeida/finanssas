@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Wallet, Loader2, Plus, Settings, Target } from 'lucide-react';
+import { Wallet, Loader2, Plus, Settings, Target, Search } from 'lucide-react';
 import { Dashboard } from './components/Dashboard';
 import { Insights } from './components/Insights';
 import { AdminPage } from './components/AdminPage';
 import { SavingsGoals } from './components/SavingsGoals';
 import { AddTransactionModal } from './components/AddTransactionModal';
+import { TransactionSearch } from './components/TransactionSearch';
 import { parseExcelFile, ColumnMapping } from './utils/excelParser';
 import { Transaction, Account, Category } from './types';
 import { initDB, insertTransactions, getAllTransactions, resetDB, exportDatabaseBlob, deleteTransaction, getAccounts, getCategories } from './services/db';
@@ -18,7 +19,7 @@ function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [isDbReady, setIsDbReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'insights' | 'savings' | 'admin'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'search' | 'insights' | 'savings' | 'admin'>('dashboard');
   
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
@@ -75,10 +76,8 @@ function App() {
   };
 
   const handleDeleteTransaction = async (id: string) => {
-    if (confirm("Are you sure you want to delete this transaction?")) {
-      await deleteTransaction(id);
-      refreshTransactions();
-    }
+    await deleteTransaction(id);
+    refreshTransactions();
   };
 
   const handleEditClick = (t: Transaction) => {
@@ -133,29 +132,36 @@ function App() {
             </h1>
           </div>
           
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center space-x-2 overflow-x-auto no-scrollbar">
               <button 
               onClick={() => setActiveTab('dashboard')}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === 'dashboard' ? 'bg-slate-100 text-blue-700' : 'text-slate-600 hover:bg-slate-50'}`}
+              className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${activeTab === 'dashboard' ? 'bg-slate-100 text-blue-700' : 'text-slate-600 hover:bg-slate-50'}`}
             >
               Dashboard
             </button>
             <button 
+              onClick={() => setActiveTab('search')}
+              className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center whitespace-nowrap ${activeTab === 'search' ? 'bg-slate-100 text-blue-700' : 'text-slate-600 hover:bg-slate-50'}`}
+            >
+              <Search className="w-3 h-3 mr-1.5" />
+              Search
+            </button>
+            <button 
               onClick={() => setActiveTab('insights')}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === 'insights' ? 'bg-slate-100 text-blue-700' : 'text-slate-600 hover:bg-slate-50'}`}
+              className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${activeTab === 'insights' ? 'bg-slate-100 text-blue-700' : 'text-slate-600 hover:bg-slate-50'}`}
             >
               AI Insights
             </button>
               <button 
               onClick={() => setActiveTab('savings')}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center ${activeTab === 'savings' ? 'bg-slate-100 text-blue-700' : 'text-slate-600 hover:bg-slate-50'}`}
+              className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center whitespace-nowrap ${activeTab === 'savings' ? 'bg-slate-100 text-blue-700' : 'text-slate-600 hover:bg-slate-50'}`}
             >
               <Target className="w-3 h-3 mr-1.5" />
               Goals
             </button>
             <button 
               onClick={() => setActiveTab('admin')}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center ${activeTab === 'admin' ? 'bg-slate-100 text-blue-700' : 'text-slate-600 hover:bg-slate-50'}`}
+              className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center whitespace-nowrap ${activeTab === 'admin' ? 'bg-slate-100 text-blue-700' : 'text-slate-600 hover:bg-slate-50'}`}
             >
               <Settings className="w-3 h-3 mr-1.5" />
               Admin
@@ -185,8 +191,18 @@ function App() {
               transactions={transactions} 
               categories={categories}
               onEdit={handleEditClick}
-              onDelete={handleDeleteTransaction}
+              onDelete={(id) => { 
+                  if(confirm("Are you sure?")) handleDeleteTransaction(id); 
+              }}
               onNavigateToAdmin={() => setActiveTab('admin')}
+            />
+          )}
+          {activeTab === 'search' && (
+            <TransactionSearch 
+              categories={categories} 
+              accounts={accounts} 
+              onEdit={handleEditClick}
+              onDelete={handleDeleteTransaction}
             />
           )}
           {activeTab === 'insights' && <Insights transactions={transactions} />}

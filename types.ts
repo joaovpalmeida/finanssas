@@ -53,3 +53,14 @@ export interface SavingsGoal {
   deadline: string;
   targetAccounts: string[];
 }
+
+export interface SearchFilters {
+  keyword?: string;
+  category?: string;
+  account?: string;
+  type?: string;
+  startDate?: string;
+  endDate?: string;
+  minAmount?: string;
+  maxAmount?: string;
+}

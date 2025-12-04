@@ -1,4 +1,4 @@
-import { Transaction, TransactionType, SavingsGoal, Category, Account, CategoryGroup } from '../types';
+import { Transaction, TransactionType, SavingsGoal, Category, Account, CategoryGroup, SearchFilters } from '../types';
 
 let db: any = null;
 let SQL: any = null;
@@ -224,6 +224,71 @@ export const getAllTransactions = (): Transaction[] => {
     });
   } catch (e) {
     console.error("Error fetching transactions", e);
+    return [];
+  }
+};
+
+export const searchTransactions = (filters: SearchFilters): Transaction[] => {
+  if (!db) return [];
+  
+  let sql = "SELECT * FROM transactions WHERE 1=1";
+  const params: any[] = [];
+
+  if (filters.keyword) {
+    sql += " AND description LIKE ?";
+    params.push(`%${filters.keyword}%`);
+  }
+
+  if (filters.category) {
+    sql += " AND category = ?";
+    params.push(filters.category);
+  }
+
+  if (filters.account) {
+    sql += " AND account = ?";
+    params.push(filters.account);
+  }
+
+  if (filters.type) {
+    sql += " AND type = ?";
+    params.push(filters.type);
+  }
+
+  if (filters.startDate) {
+    sql += " AND date >= ?";
+    params.push(filters.startDate);
+  }
+
+  if (filters.endDate) {
+    sql += " AND date <= ?";
+    // Add time component to end date to ensure inclusive day
+    params.push(filters.endDate + 'T23:59:59.999Z');
+  }
+
+  if (filters.minAmount) {
+     sql += " AND ABS(amount) >= ?";
+     params.push(parseFloat(filters.minAmount));
+  }
+
+  if (filters.maxAmount) {
+    sql += " AND ABS(amount) <= ?";
+    params.push(parseFloat(filters.maxAmount));
+  }
+
+  sql += " ORDER BY date DESC LIMIT 500";
+
+  try {
+    const stmt = db.prepare(sql);
+    stmt.bind(params);
+    const transactions: Transaction[] = [];
+    while (stmt.step()) {
+      const row = stmt.getAsObject();
+      transactions.push(row as Transaction);
+    }
+    stmt.free();
+    return transactions;
+  } catch (e) {
+    console.error("Search error", e);
     return [];
   }
 };

@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { Upload, FileSpreadsheet, Loader2, AlertCircle, ArrowRight, Settings, Layers, ChevronRight, ArrowLeft, Table, Calendar, Columns, ListFilter } from 'lucide-react';
+import { Upload, FileSpreadsheet, Loader2, AlertCircle, ArrowRight, Settings, Layers, ChevronRight, ArrowLeft, Table, Calendar, Columns, ListFilter, ArrowDownToLine, ArrowUpFromLine } from 'lucide-react';
 import { getExcelColumns, getExcelSheetNames, ColumnMapping, ExcelColumn } from '../utils/excelParser';
 
 interface FileUploadProps {
@@ -34,7 +34,11 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onUpload, isLoading, err
     incomeCategory: '',
     expenseCategory: '',
     startRow: 2,
-    endRow: undefined
+    endRow: undefined,
+    incomeStartRow: 2,
+    incomeEndRow: undefined,
+    expenseStartRow: 2,
+    expenseEndRow: undefined
   });
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -54,7 +58,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onUpload, isLoading, err
       return match ? String(match.index) : '';
     };
 
-    return {
+    const mapping = {
       date: findIndex(/date/i),
       description: findIndex(/description|desc|name/i),
       amount: findIndex(/amount|value|cost/i),
@@ -62,8 +66,11 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onUpload, isLoading, err
       expense: findIndex(/expense|debit|withdrawal/i),
       category: findIndex(/category|type/i),
       account: findIndex(/account|bank|source/i),
-      startRow: 2 // Default to row 2
+      startRow: 2,
+      incomeStartRow: 2,
+      expenseStartRow: 2
     };
+    return mapping;
   };
 
   const loadSheetColumns = async (fileToLoad: File, sheetName: string) => {
@@ -140,7 +147,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onUpload, isLoading, err
     setFile(null);
     setColumns([]);
     setSheets([]);
-    setMapping({ date: '', description: '', amount: '', income: '', expense: '', category: '', startRow: 2 });
+    setMapping({ date: '', description: '', amount: '', income: '', expense: '', category: '', startRow: 2, incomeStartRow: 2, expenseStartRow: 2 });
   };
 
   // Render Helpers
@@ -168,6 +175,21 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onUpload, isLoading, err
         ))}
       </select>
       {helperText && <p className="text-[10px] text-slate-400 mt-1">{helperText}</p>}
+    </div>
+  );
+
+  // Row Range Input Helper
+  const renderRowInput = (label: string, value: number | undefined, onChange: (val: number) => void, placeholder?: string) => (
+    <div>
+       <label className="block text-xs font-semibold text-slate-500 mb-1">{label}</label>
+       <input 
+         type="number"
+         min="1"
+         placeholder={placeholder}
+         value={value || ''}
+         onChange={(e) => onChange(parseInt(e.target.value))}
+         className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white text-sm"
+       />
     </div>
   );
 
@@ -253,7 +275,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onUpload, isLoading, err
              onClick={() => setAmountMode('split')}
              className={`px-3 py-1.5 text-xs font-medium rounded-md flex items-center transition-colors ${amountMode === 'split' ? 'bg-blue-50 text-blue-700 border border-blue-100' : 'text-slate-500 hover:text-slate-700'}`}
            >
-             <Columns className="w-3 h-3 mr-1.5" /> Separate Income/Expense
+             <ArrowUpFromLine className="w-3 h-3 mr-1.5" /> Separate Income/Expense
            </button>
         </div>
 
@@ -289,74 +311,72 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onUpload, isLoading, err
 
           {/* Section: Amounts & Specifics */}
           <div className="space-y-4">
-             <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100 pb-2">Transaction Values</h4>
+             <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100 pb-2">Transaction Values & Row Ranges</h4>
              
              {amountMode === 'single' ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                   {renderColumnSelect("Amount Column", mapping.amount, v => setMapping({...mapping, amount: v}), true)}
-                </div>
+                <>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                     {renderColumnSelect("Amount Column", mapping.amount, v => setMapping({...mapping, amount: v}), true)}
+                  </div>
+                  
+                  {/* Global Row Selection for Single Mode */}
+                  <div className="grid grid-cols-2 gap-4 bg-slate-50 p-3 rounded-lg border border-slate-100 mt-2">
+                     {renderRowInput("Start Row", mapping.startRow, v => setMapping({...mapping, startRow: v}))}
+                     {renderRowInput("End Row (Optional)", mapping.endRow, v => setMapping({...mapping, endRow: v}), "End of file")}
+                  </div>
+                </>
              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-slate-100 p-4 rounded-lg">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                    {/* Income Group */}
-                   <div className="space-y-3">
-                      <div className="flex items-center text-emerald-600 font-semibold text-sm">
-                         Income Mapping
+                   <div className="space-y-3 bg-emerald-50/50 p-4 rounded-lg border border-emerald-100">
+                      <div className="flex items-center text-emerald-600 font-semibold text-sm mb-2">
+                         <ArrowDownToLine className="w-4 h-4 mr-2" />
+                         Income Settings
                       </div>
-                      {renderColumnSelect("Amount Column", mapping.income, v => setMapping({...mapping, income: v}), !mapping.expense)}
-                      {renderColumnSelect("Description (Optional)", mapping.incomeDescription, v => setMapping({...mapping, incomeDescription: v}), false, "Overrides default description")}
-                      {renderColumnSelect("Category (Optional)", mapping.incomeCategory, v => setMapping({...mapping, incomeCategory: v}), false, "Overrides default category")}
+                      {renderColumnSelect("Income Amount Column", mapping.income, v => setMapping({...mapping, income: v}), !mapping.expense)}
+                      {renderColumnSelect("Description (Optional)", mapping.incomeDescription, v => setMapping({...mapping, incomeDescription: v}), false, "Overrides default")}
+                      {renderColumnSelect("Category (Optional)", mapping.incomeCategory, v => setMapping({...mapping, incomeCategory: v}), false, "Overrides default")}
+                      
+                      <div className="pt-2 border-t border-emerald-100/50">
+                        <label className="text-[10px] font-bold text-emerald-500 uppercase">Income Rows</label>
+                        <div className="grid grid-cols-2 gap-2 mt-1">
+                          {renderRowInput("Start", mapping.incomeStartRow, v => setMapping({...mapping, incomeStartRow: v}))}
+                          {renderRowInput("End", mapping.incomeEndRow, v => setMapping({...mapping, incomeEndRow: v}), "End")}
+                        </div>
+                      </div>
                    </div>
                    
                    {/* Expense Group */}
-                   <div className="space-y-3">
-                      <div className="flex items-center text-red-600 font-semibold text-sm">
-                         Expense Mapping
+                   <div className="space-y-3 bg-red-50/50 p-4 rounded-lg border border-red-100">
+                      <div className="flex items-center text-red-600 font-semibold text-sm mb-2">
+                         <ArrowUpFromLine className="w-4 h-4 mr-2" />
+                         Expense Settings
                       </div>
-                      {renderColumnSelect("Amount Column", mapping.expense, v => setMapping({...mapping, expense: v}), !mapping.income)}
-                      {renderColumnSelect("Description (Optional)", mapping.expenseDescription, v => setMapping({...mapping, expenseDescription: v}), false, "Overrides default description")}
-                      {renderColumnSelect("Category (Optional)", mapping.expenseCategory, v => setMapping({...mapping, expenseCategory: v}), false, "Overrides default category")}
+                      {renderColumnSelect("Expense Amount Column", mapping.expense, v => setMapping({...mapping, expense: v}), !mapping.income)}
+                      {renderColumnSelect("Description (Optional)", mapping.expenseDescription, v => setMapping({...mapping, expenseDescription: v}), false, "Overrides default")}
+                      {renderColumnSelect("Category (Optional)", mapping.expenseCategory, v => setMapping({...mapping, expenseCategory: v}), false, "Overrides default")}
+                      
+                      <div className="pt-2 border-t border-red-100/50">
+                        <label className="text-[10px] font-bold text-red-500 uppercase">Expense Rows</label>
+                        <div className="grid grid-cols-2 gap-2 mt-1">
+                          {renderRowInput("Start", mapping.expenseStartRow, v => setMapping({...mapping, expenseStartRow: v}))}
+                          {renderRowInput("End", mapping.expenseEndRow, v => setMapping({...mapping, expenseEndRow: v}), "End")}
+                        </div>
+                      </div>
                    </div>
                    
                    <p className="text-[10px] text-slate-400 md:col-span-2 text-center">
-                     For rows where an amount exists in both columns, both fields are checked.
+                     All valid expense amounts will be converted to negative values automatically.
                    </p>
                 </div>
              )}
 
              {amountMode === 'split' && (
-               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
-                  {renderColumnSelect("Default Description", mapping.description, v => setMapping({...mapping, description: v}), false, "Used if specific column empty")}
-                  {renderColumnSelect("Default Category", mapping.category, v => setMapping({...mapping, category: v}), false, "Used if specific column empty")}
+               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2 border-t border-slate-100 pt-3">
+                  {renderColumnSelect("Default Description (Fallback)", mapping.description, v => setMapping({...mapping, description: v}), false)}
+                  {renderColumnSelect("Default Category (Fallback)", mapping.category, v => setMapping({...mapping, category: v}), false)}
                </div>
              )}
-          </div>
-
-          {/* Section: Row Selection */}
-          <div className="space-y-4">
-             <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100 pb-2">Row Selection</h4>
-             <div className="grid grid-cols-2 gap-4">
-                <div>
-                   <label className="block text-xs font-semibold text-slate-500 mb-1">Start Row</label>
-                   <input 
-                     type="number"
-                     min="1"
-                     value={mapping.startRow || 1}
-                     onChange={(e) => setMapping({...mapping, startRow: parseInt(e.target.value) || 1})}
-                     className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white text-sm"
-                   />
-                </div>
-                <div>
-                   <label className="block text-xs font-semibold text-slate-500 mb-1">End Row (Optional)</label>
-                   <input 
-                     type="number"
-                     min="1"
-                     placeholder="End of file"
-                     value={mapping.endRow || ''}
-                     onChange={(e) => setMapping({...mapping, endRow: e.target.value ? parseInt(e.target.value) : undefined})}
-                     className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white text-sm"
-                   />
-                </div>
-             </div>
           </div>
 
           {/* Section: Account */}
