@@ -54,7 +54,7 @@ export const SqlConsole: React.FC = () => {
             <textarea
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              className="w-full h-32 bg-slate-900 text-green-400 font-mono text-sm p-4 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full h-32 bg-slate-900 text-green-400 font-mono text-base sm:text-sm p-4 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               placeholder="SELECT * FROM transactions..."
             />
             <button

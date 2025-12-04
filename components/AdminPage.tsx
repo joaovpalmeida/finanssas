@@ -155,7 +155,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                         value={apiKey}
                         onChange={(e) => setApiKey(e.target.value)}
                         placeholder="Enter Google API Key..."
-                        className="flex-1 px-3 py-2 border border-purple-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white text-slate-800"
+                        className="flex-1 px-3 py-2 border border-purple-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white text-slate-800 text-base sm:text-sm"
                       />
                       <button 
                         onClick={handleSaveApiKey}
@@ -332,7 +332,7 @@ const AccountList: React.FC<{
                {editingItem === acc.name ? (
                   <div className="flex items-center w-full space-x-2">
                     <input 
-                      className="flex-1 px-2 py-1 border rounded text-sm bg-white text-slate-800"
+                      className="flex-1 px-2 py-1 border rounded text-base sm:text-sm bg-white text-slate-800"
                       value={editValue}
                       onChange={e => setEditValue(e.target.value)}
                     />
@@ -389,7 +389,7 @@ const CategoryList: React.FC<{
                   <div className="space-y-2">
                     <div className="flex items-center space-x-2">
                       <input 
-                        className="flex-1 px-2 py-1 border rounded text-sm bg-white text-slate-800"
+                        className="flex-1 px-2 py-1 border rounded text-base sm:text-sm bg-white text-slate-800"
                         value={formData.name}
                         onChange={e => setFormData({...formData, name: e.target.value})}
                       />

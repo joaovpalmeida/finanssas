@@ -142,7 +142,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, 
               <select
                 value={dateFilter}
                 onChange={(e) => setDateFilter(e.target.value)}
-                className="pl-9 pr-8 py-2 border border-slate-200 rounded-lg text-sm font-medium bg-white focus:ring-2 focus:ring-blue-500 appearance-none shadow-sm text-slate-700"
+                className="pl-9 pr-8 py-2 border border-slate-200 rounded-lg text-base sm:text-sm font-medium bg-white focus:ring-2 focus:ring-blue-500 appearance-none shadow-sm text-slate-700"
               >
                 <option value="all">All Time</option>
                 {availableMonths.map(month => (
@@ -342,34 +342,35 @@ export const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, 
           <table className="w-full text-sm text-left">
             <thead className="bg-slate-50 text-slate-500 font-medium">
               <tr>
-                <th className="px-6 py-3">Date</th>
-                <th className="px-6 py-3">Account</th>
-                <th className="px-6 py-3">Description</th>
-                <th className="px-6 py-3">Category</th>
-                <th className="px-6 py-3 text-right">Amount</th>
-                <th className="px-6 py-3 text-right">Balance</th>
-                <th className="px-6 py-3 text-right">Actions</th>
+                <th className="px-4 sm:px-6 py-3">Date</th>
+                <th className="px-6 py-3 hidden md:table-cell">Account</th>
+                <th className="px-4 sm:px-6 py-3">Description</th>
+                <th className="px-6 py-3 hidden sm:table-cell">Category</th>
+                <th className="px-4 sm:px-6 py-3 text-right">Amount</th>
+                <th className="px-6 py-3 text-right hidden lg:table-cell">Balance</th>
+                <th className="px-4 sm:px-6 py-3 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {filteredTransactions.slice(0, 50).map((t) => (
                 <tr key={t.id} className="hover:bg-slate-50 transition-colors group">
-                  <td className="px-6 py-3 text-slate-600 whitespace-nowrap">{new Date(t.date).toLocaleDateString()}</td>
-                  <td className="px-6 py-3 text-slate-800 font-medium whitespace-nowrap">{t.account}</td>
-                  <td className="px-6 py-3 text-slate-800 max-w-xs truncate">{t.description}</td>
-                  <td className="px-6 py-3 whitespace-nowrap">
+                  <td className="px-4 sm:px-6 py-3 text-slate-600 whitespace-nowrap">{new Date(t.date).toLocaleDateString()}</td>
+                  <td className="px-6 py-3 text-slate-800 font-medium whitespace-nowrap hidden md:table-cell">{t.account}</td>
+                  <td className="px-4 sm:px-6 py-3 text-slate-800 max-w-[120px] sm:max-w-xs truncate">{t.description}</td>
+                  <td className="px-6 py-3 whitespace-nowrap hidden sm:table-cell">
                     <span className="px-2 py-1 bg-slate-100 text-slate-600 rounded text-xs">
                       {t.category}
                     </span>
                   </td>
-                  <td className={`px-6 py-3 text-right font-semibold whitespace-nowrap ${t.type === 'Income' ? 'text-emerald-600' : 'text-slate-800'}`}>
+                  <td className={`px-4 sm:px-6 py-3 text-right font-semibold whitespace-nowrap ${t.type === 'Income' ? 'text-emerald-600' : 'text-slate-800'}`}>
                     {t.type === 'Income' ? '+' : ''}{formatCurrency(t.amount)}
                   </td>
-                  <td className="px-6 py-3 text-right text-slate-500 font-medium whitespace-nowrap">
+                  <td className="px-6 py-3 text-right text-slate-500 font-medium whitespace-nowrap hidden lg:table-cell">
                     {t.balanceAfterTransaction !== undefined ? formatCurrency(t.balanceAfterTransaction) : '-'}
                   </td>
-                  <td className="px-6 py-3 text-right whitespace-nowrap">
-                    <div className="flex items-center justify-end space-x-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <td className="px-4 sm:px-6 py-3 text-right whitespace-nowrap">
+                    <div className="flex items-center justify-end space-x-2">
+                      {/* Always visible on mobile, no group-hover check for better UX */}
                       <button 
                         onClick={() => onEdit(t)}
                         className="p-1 text-slate-400 hover:text-blue-600 transition-colors"

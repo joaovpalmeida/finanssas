@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "homepage": "finanssas",
+  "homepage":"finanssas",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
@@ -16,7 +16,6 @@
     "react-dom": "^19.2.1",
     "react-router-dom": "^7.10.1",
     "recharts": "^3.5.1",
-    "vite-plugin-html": "^3.2.2",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {

@@ -91,7 +91,7 @@ export const TransactionSearch: React.FC<TransactionSearchProps> = ({ categories
                   value={filters.keyword}
                   onChange={e => setFilters({...filters, keyword: e.target.value})}
                   placeholder="Search description..."
-                  className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm bg-white text-slate-800"
+                  className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-base sm:text-sm bg-white text-slate-800"
                   onKeyDown={e => e.key === 'Enter' && handleSearch()}
                 />
              </div>
@@ -105,7 +105,7 @@ export const TransactionSearch: React.FC<TransactionSearchProps> = ({ categories
                 <select 
                   value={filters.category}
                   onChange={e => setFilters({...filters, category: e.target.value})}
-                  className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm appearance-none bg-white text-slate-800"
+                  className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-base sm:text-sm appearance-none bg-white text-slate-800"
                 >
                   <option value="">All Categories</option>
                   {categories.map(c => (
@@ -123,7 +123,7 @@ export const TransactionSearch: React.FC<TransactionSearchProps> = ({ categories
                 <select 
                   value={filters.account}
                   onChange={e => setFilters({...filters, account: e.target.value})}
-                  className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm appearance-none bg-white text-slate-800"
+                  className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-base sm:text-sm appearance-none bg-white text-slate-800"
                 >
                   <option value="">All Accounts</option>
                   {accounts.map(a => (
@@ -140,7 +140,7 @@ export const TransactionSearch: React.FC<TransactionSearchProps> = ({ categories
                type="date"
                value={filters.startDate}
                onChange={e => setFilters({...filters, startDate: e.target.value})}
-               className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm bg-white text-slate-800"
+               className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-base sm:text-sm bg-white text-slate-800"
              />
            </div>
            <div>
@@ -149,7 +149,7 @@ export const TransactionSearch: React.FC<TransactionSearchProps> = ({ categories
                type="date"
                value={filters.endDate}
                onChange={e => setFilters({...filters, endDate: e.target.value})}
-               className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm bg-white text-slate-800"
+               className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-base sm:text-sm bg-white text-slate-800"
              />
            </div>
 
@@ -159,7 +159,7 @@ export const TransactionSearch: React.FC<TransactionSearchProps> = ({ categories
              <select 
                 value={filters.type}
                 onChange={e => setFilters({...filters, type: e.target.value})}
-                className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm bg-white text-slate-800"
+                className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-base sm:text-sm bg-white text-slate-800"
              >
                 <option value="">All Types</option>
                 <option value="Income">Income</option>
@@ -194,12 +194,12 @@ export const TransactionSearch: React.FC<TransactionSearchProps> = ({ categories
           <table className="w-full text-sm text-left">
             <thead className="bg-slate-50 text-slate-500 font-medium border-b border-slate-100">
               <tr>
-                <th className="px-6 py-3">Date</th>
-                <th className="px-6 py-3">Account</th>
-                <th className="px-6 py-3">Description</th>
-                <th className="px-6 py-3">Category</th>
-                <th className="px-6 py-3 text-right">Amount</th>
-                <th className="px-6 py-3 text-right">Actions</th>
+                <th className="px-4 sm:px-6 py-3">Date</th>
+                <th className="px-6 py-3 hidden md:table-cell">Account</th>
+                <th className="px-4 sm:px-6 py-3">Description</th>
+                <th className="px-6 py-3 hidden sm:table-cell">Category</th>
+                <th className="px-4 sm:px-6 py-3 text-right">Amount</th>
+                <th className="px-4 sm:px-6 py-3 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -213,20 +213,20 @@ export const TransactionSearch: React.FC<TransactionSearchProps> = ({ categories
               ) : (
                 results.map((t) => (
                   <tr key={t.id} className="hover:bg-slate-50 transition-colors group">
-                    <td className="px-6 py-3 text-slate-600 whitespace-nowrap">
+                    <td className="px-4 sm:px-6 py-3 text-slate-600 whitespace-nowrap">
                         {new Date(t.date).toLocaleDateString()}
                     </td>
-                    <td className="px-6 py-3 text-slate-800 font-medium whitespace-nowrap">{t.account}</td>
-                    <td className="px-6 py-3 text-slate-800 max-w-xs truncate" title={t.description}>{t.description}</td>
-                    <td className="px-6 py-3 whitespace-nowrap">
+                    <td className="px-6 py-3 text-slate-800 font-medium whitespace-nowrap hidden md:table-cell">{t.account}</td>
+                    <td className="px-4 sm:px-6 py-3 text-slate-800 max-w-[120px] sm:max-w-xs truncate" title={t.description}>{t.description}</td>
+                    <td className="px-6 py-3 whitespace-nowrap hidden sm:table-cell">
                       <span className="px-2 py-1 bg-slate-100 text-slate-600 rounded text-xs">
                         {t.category}
                       </span>
                     </td>
-                    <td className={`px-6 py-3 text-right font-semibold whitespace-nowrap ${t.type === 'Income' ? 'text-emerald-600' : 'text-slate-800'}`}>
+                    <td className={`px-4 sm:px-6 py-3 text-right font-semibold whitespace-nowrap ${t.type === 'Income' ? 'text-emerald-600' : 'text-slate-800'}`}>
                       {t.type === 'Income' ? '+' : ''}{formatCurrency(t.amount)}
                     </td>
-                    <td className="px-6 py-3 text-right whitespace-nowrap">
+                    <td className="px-4 sm:px-6 py-3 text-right whitespace-nowrap">
                         <div className="flex items-center justify-end space-x-2">
                             <button 
                                 onClick={() => onEdit(t)}

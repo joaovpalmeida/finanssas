@@ -128,7 +128,7 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
                   required
                   value={formData.amount}
                   onChange={e => setFormData({ ...formData, amount: e.target.value })}
-                  className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white text-slate-800"
+                  className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white text-slate-800 text-base sm:text-sm"
                   placeholder="0.00"
                 />
               </div>
@@ -142,7 +142,7 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
                   required
                   value={formData.date}
                   onChange={e => setFormData({ ...formData, date: e.target.value })}
-                  className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white text-slate-800"
+                  className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white text-slate-800 text-base sm:text-sm"
                 />
               </div>
             </div>
@@ -158,7 +158,7 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
                 required
                 value={formData.description}
                 onChange={e => setFormData({ ...formData, description: e.target.value })}
-                className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white text-slate-800"
+                className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white text-slate-800 text-base sm:text-sm"
                 placeholder="e.g. Grocery Shopping"
               />
             </div>
@@ -175,7 +175,7 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
                 required
                 value={formData.account}
                 onChange={e => setFormData({ ...formData, account: e.target.value })}
-                className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white text-slate-800"
+                className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white text-slate-800 text-base sm:text-sm"
                 placeholder="Select or type new account..."
               />
               <datalist id="accounts-list">
@@ -197,7 +197,7 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
                 list="category-list"
                 value={formData.category}
                 onChange={e => setFormData({ ...formData, category: e.target.value })}
-                className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white text-slate-800"
+                className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white text-slate-800 text-base sm:text-sm"
                 placeholder="Select or type new category..."
               />
               <datalist id="category-list">

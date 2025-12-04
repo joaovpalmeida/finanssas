@@ -194,7 +194,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onUpload, isLoading, err
       <select 
         value={value || ''}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white text-sm"
+        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white text-base sm:text-sm"
       >
         <option value="">{required ? 'Select Column...' : '(None / Use Default)'}</option>
         {columns.map(col => (
@@ -226,7 +226,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onUpload, isLoading, err
         <select 
           value={colValue || ''}
           onChange={(e) => onColChange(e.target.value)}
-          className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white text-sm"
+          className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white text-base sm:text-sm"
         >
           <option value="">(No Column Mapped)</option>
           {columns.map(col => (
@@ -241,7 +241,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onUpload, isLoading, err
              value={manualValue || ''}
              onChange={(e) => onManualChange(e.target.value)}
              placeholder={`Or enter static value: ${placeholder}`}
-             className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-1 focus:ring-blue-500 bg-slate-50 text-sm text-slate-700"
+             className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-1 focus:ring-blue-500 bg-slate-50 text-slate-700 text-base sm:text-sm"
            />
         )}
       </div>
@@ -257,7 +257,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onUpload, isLoading, err
          placeholder={placeholder}
          value={value || ''}
          onChange={(e) => onChange(parseInt(e.target.value))}
-         className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white text-sm"
+         className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white text-base sm:text-sm"
        />
     </div>
   );
@@ -447,7 +447,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onUpload, isLoading, err
                          type="date"
                          value={defaultDate}
                          onChange={(e) => setDefaultDate(e.target.value)}
-                         className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white text-sm"
+                         className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white text-base sm:text-sm"
                        />
                     </div>
                 </div>
@@ -579,7 +579,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onUpload, isLoading, err
                    <select 
                      value={mapping.account || ''}
                      onChange={(e) => setMapping({...mapping, account: e.target.value})}
-                     className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white text-sm"
+                     className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white text-base sm:text-sm"
                    >
                      <option value="">(Use Default Name)</option>
                      {columns.map(col => (
@@ -594,7 +594,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onUpload, isLoading, err
                     value={accountName}
                     onChange={(e) => setAccountName(e.target.value)}
                     placeholder="Default Name (e.g. Chase)"
-                    className="flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white text-sm"
+                    className="flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white text-base sm:text-sm"
                     disabled={!!mapping.account}
                  />
              </div>

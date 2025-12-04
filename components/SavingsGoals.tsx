@@ -163,7 +163,7 @@ export const SavingsGoals: React.FC<SavingsGoalsProps> = ({ accountBalances }) =
                 value={formData.name}
                 onChange={e => setFormData({...formData, name: e.target.value})}
                 placeholder="e.g. New Car"
-                className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white text-slate-800"
+                className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white text-slate-800 text-base sm:text-sm"
               />
             </div>
             <div>
@@ -174,7 +174,7 @@ export const SavingsGoals: React.FC<SavingsGoalsProps> = ({ accountBalances }) =
                 value={formData.targetAmount}
                 onChange={e => setFormData({...formData, targetAmount: e.target.value})}
                 placeholder="5000"
-                className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white text-slate-800"
+                className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white text-slate-800 text-base sm:text-sm"
               />
             </div>
             <div>
@@ -184,7 +184,7 @@ export const SavingsGoals: React.FC<SavingsGoalsProps> = ({ accountBalances }) =
                 required
                 value={formData.deadline}
                 onChange={e => setFormData({...formData, deadline: e.target.value})}
-                className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white text-slate-800"
+                className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white text-slate-800 text-base sm:text-sm"
               />
             </div>
             
@@ -327,12 +327,7 @@ export const SavingsGoals: React.FC<SavingsGoalsProps> = ({ accountBalances }) =
                       </div>
                       
                       <div className="text-xs text-slate-500 pt-2 border-t border-slate-200">
-                         <span className="font-medium mr-1">Linked Accounts:</span> 
-                         <span title={goal.targetAccounts.join(', ')}>
-                           {goal.targetAccounts.length > 2 
-                             ? `${goal.targetAccounts.slice(0, 2).join(', ')} +${goal.targetAccounts.length - 2}`
-                             : goal.targetAccounts.join(', ')}
-                         </span>
+                        Based on deadline and current balance
                       </div>
                     </div>
                   )}
