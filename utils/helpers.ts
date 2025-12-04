@@ -12,6 +12,13 @@ export const formatDate = (dateString: string): string => {
   return new Date(dateString).toLocaleDateString('en-GB', options);
 };
 
+export const getMonthYearLabel = (dateKey: string): string => {
+  if (!dateKey || dateKey === 'all') return 'All Time';
+  const [year, month] = dateKey.split('-');
+  const date = new Date(parseInt(year), parseInt(month) - 1, 1);
+  return date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+};
+
 export const calculateMonthsBetween = (d1: Date, d2: Date): number => {
   let months;
   months = (d2.getFullYear() - d1.getFullYear()) * 12;
