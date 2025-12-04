@@ -3,10 +3,29 @@ import { Transaction, TransactionType } from '../types';
 
 export interface ColumnMapping {
   date: string; // stored as stringified index "0", "1"...
+  
+  // Common or default fields
   description: string;
-  amount: string;
   category: string;
+  
+  // Single Amount Mode
+  amount?: string;
+
+  // Split Amount Mode
+  income?: string;
+  expense?: string;
+  
+  // Split Mode Specific Overrides
+  incomeDescription?: string;
+  expenseDescription?: string;
+  incomeCategory?: string;
+  expenseCategory?: string;
+  
   account?: string;
+
+  // Row selection
+  startRow?: number; // 1-based index from UI
+  endRow?: number;   // 1-based index from UI
 }
 
 export interface ExcelColumn {
@@ -95,12 +114,6 @@ export const getExcelColumns = (file: File, sheetName?: string): Promise<ExcelCo
   });
 };
 
-// Deprecated alias for backward compatibility if needed, but we use getExcelColumns now
-export const getExcelHeaders = async (file: File, sheetName?: string): Promise<string[]> => {
-    const cols = await getExcelColumns(file, sheetName);
-    return cols.map(c => c.header);
-};
-
 export const parseExcelFile = (
   file: File, 
   defaultAccountName: string = 'Main Account', 
@@ -138,22 +151,37 @@ export const parseExcelFile = (
         let dateIndex = -1;
         let descIndex = -1;
         let amountIndex = -1;
+        let incomeIndex = -1;
+        let expenseIndex = -1;
         let categoryIndex = -1;
         let accountIndex = -1;
+        
+        // Split mode overrides
+        let incomeDescIndex = -1;
+        let expenseDescIndex = -1;
+        let incomeCatIndex = -1;
+        let expenseCatIndex = -1;
 
         // If mapping is provided, prioritize it
         if (mapping) {
           // Attempt to parse mapping values as integer indices
-          if (mapping.date !== '' && !isNaN(parseInt(mapping.date))) dateIndex = parseInt(mapping.date);
-          if (mapping.description !== '' && !isNaN(parseInt(mapping.description))) descIndex = parseInt(mapping.description);
-          if (mapping.amount !== '' && !isNaN(parseInt(mapping.amount))) amountIndex = parseInt(mapping.amount);
-          if (mapping.category !== '' && !isNaN(parseInt(mapping.category))) categoryIndex = parseInt(mapping.category);
-          if (mapping.account && mapping.account !== '' && !isNaN(parseInt(mapping.account))) accountIndex = parseInt(mapping.account);
+          const getIdx = (val: string | undefined) => (val && val !== '' && !isNaN(parseInt(val))) ? parseInt(val) : -1;
+
+          dateIndex = getIdx(mapping.date);
+          descIndex = getIdx(mapping.description);
+          categoryIndex = getIdx(mapping.category);
+          accountIndex = getIdx(mapping.account);
           
-          // Fallback: If for some reason legacy mapping (names) is passed, try to find index by name
-          if (dateIndex === -1 && mapping.date) dateIndex = rawHeaders.indexOf(mapping.date);
-          if (descIndex === -1 && mapping.description) descIndex = rawHeaders.indexOf(mapping.description);
-          if (amountIndex === -1 && mapping.amount) amountIndex = rawHeaders.indexOf(mapping.amount);
+          // Amount mapping
+          amountIndex = getIdx(mapping.amount);
+          incomeIndex = getIdx(mapping.income);
+          expenseIndex = getIdx(mapping.expense);
+          
+          // Split Overrides
+          incomeDescIndex = getIdx(mapping.incomeDescription);
+          expenseDescIndex = getIdx(mapping.expenseDescription);
+          incomeCatIndex = getIdx(mapping.incomeCategory);
+          expenseCatIndex = getIdx(mapping.expenseCategory);
         } else {
           // Heuristics
           dateIndex = lowerHeaders.findIndex(h => h.includes('date'));
@@ -163,10 +191,12 @@ export const parseExcelFile = (
           accountIndex = lowerHeaders.findIndex(h => h.includes('account') || h.includes('bank') || h.includes('source'));
         }
 
-        // Validation: We need at least an Amount. 
-        // We need EITHER a Date Column OR a Default Date.
-        if (amountIndex === -1) {
-             reject(new Error("Could not identify Amount column. Please check your column mapping."));
+        // Validation: We need at least an Amount OR (Income + Expense indices).
+        const hasSingleAmount = amountIndex !== -1;
+        const hasSplitAmount = incomeIndex !== -1 || expenseIndex !== -1;
+
+        if (!hasSingleAmount && !hasSplitAmount) {
+             reject(new Error("Could not identify Amount columns. Please check your column mapping."));
              return;
         }
 
@@ -178,18 +208,76 @@ export const parseExcelFile = (
         const transactions: Transaction[] = [];
         const fallbackDateStr = defaultDate ? new Date(defaultDate).toISOString() : new Date().toISOString();
 
-        // Skip header row
-        for (let i = 1; i < jsonData.length; i++) {
+        // Row Selection Logic
+        // UI gives 1-based start row. JSON array is 0-based.
+        // Usually row 0 is header. Data starts at row 1.
+        // If user says Start Row 2, that maps to index 1.
+        let startIndex = 1; 
+        if (mapping?.startRow && mapping.startRow > 0) {
+           startIndex = mapping.startRow - 1;
+        }
+
+        let endIndex = jsonData.length;
+        if (mapping?.endRow && mapping.endRow > 0 && mapping.endRow <= jsonData.length) {
+           endIndex = mapping.endRow;
+        }
+
+        for (let i = startIndex; i < endIndex; i++) {
           const row = jsonData[i];
           if (!row) continue;
           
-          // Robust check: ensure row has enough columns or at least the critical ones aren't undefined
-          if (row[amountIndex] === undefined) continue;
+          let amount = 0;
+          let type = TransactionType.EXPENSE;
+          let isValidRow = false;
+          
+          let currentRowDescIndex = descIndex;
+          let currentRowCatIndex = categoryIndex;
 
-          let amount = parseFloat(String(row[amountIndex]).replace(/[^0-9.-]/g, ''));
-          if (isNaN(amount)) amount = 0;
+          // LOGIC: Split Columns vs Single Column
+          if (hasSplitAmount) {
+             // Check Income Column
+             let incVal = 0;
+             if (incomeIndex !== -1 && row[incomeIndex] !== undefined) {
+               incVal = parseFloat(String(row[incomeIndex]).replace(/[^0-9.-]/g, ''));
+             }
 
-          const type = amount >= 0 ? TransactionType.INCOME : TransactionType.EXPENSE;
+             // Check Expense Column
+             let expVal = 0;
+             if (expenseIndex !== -1 && row[expenseIndex] !== undefined) {
+               expVal = parseFloat(String(row[expenseIndex]).replace(/[^0-9.-]/g, ''));
+             }
+
+             // Determine Type based on presence (absolute values)
+             if (!isNaN(incVal) && incVal !== 0) {
+                amount = Math.abs(incVal);
+                type = TransactionType.INCOME;
+                isValidRow = true;
+                // Use specific income mappings if available
+                if (incomeDescIndex !== -1) currentRowDescIndex = incomeDescIndex;
+                if (incomeCatIndex !== -1) currentRowCatIndex = incomeCatIndex;
+
+             } else if (!isNaN(expVal) && expVal !== 0) {
+                amount = -Math.abs(expVal); // Expenses are negative internally
+                type = TransactionType.EXPENSE;
+                isValidRow = true;
+                // Use specific expense mappings if available
+                if (expenseDescIndex !== -1) currentRowDescIndex = expenseDescIndex;
+                if (expenseCatIndex !== -1) currentRowCatIndex = expenseCatIndex;
+             }
+
+          } else {
+             // Single Amount Column
+             if (row[amountIndex] !== undefined) {
+                let val = parseFloat(String(row[amountIndex]).replace(/[^0-9.-]/g, ''));
+                if (!isNaN(val) && val !== 0) {
+                   amount = val;
+                   type = amount >= 0 ? TransactionType.INCOME : TransactionType.EXPENSE;
+                   isValidRow = true;
+                }
+             }
+          }
+
+          if (!isValidRow) continue;
           
           let dateStr = fallbackDateStr;
           
@@ -212,9 +300,9 @@ export const parseExcelFile = (
           transactions.push({
             id: `txn-${Date.now()}-${i}-${Math.random()}`,
             date: dateStr,
-            description: (descIndex !== -1 && row[descIndex]) ? String(row[descIndex]) : 'Unspecified',
+            description: (currentRowDescIndex !== -1 && row[currentRowDescIndex]) ? String(row[currentRowDescIndex]) : 'Unspecified',
             amount: amount,
-            category: (categoryIndex !== -1 && row[categoryIndex]) ? String(row[categoryIndex]) : 'Uncategorized',
+            category: (currentRowCatIndex !== -1 && row[currentRowCatIndex]) ? String(row[currentRowCatIndex]) : 'Uncategorized',
             type: type,
             account: (accountIndex !== -1 && row[accountIndex]) ? String(row[accountIndex]) : defaultAccountName
           });

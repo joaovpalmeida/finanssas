@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { Upload, FileSpreadsheet, Loader2, AlertCircle, ArrowRight, Settings, Layers, ChevronRight, ArrowLeft, Table, Calendar } from 'lucide-react';
+import { Upload, FileSpreadsheet, Loader2, AlertCircle, ArrowRight, Settings, Layers, ChevronRight, ArrowLeft, Table, Calendar, Columns, ListFilter } from 'lucide-react';
 import { getExcelColumns, getExcelSheetNames, ColumnMapping, ExcelColumn } from '../utils/excelParser';
 
 interface FileUploadProps {
@@ -20,11 +20,21 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onUpload, isLoading, err
   const [sheets, setSheets] = useState<string[]>([]);
   const [selectedSheet, setSelectedSheet] = useState<string>('');
   
+  const [amountMode, setAmountMode] = useState<'single' | 'split'>('single');
+  
   const [mapping, setMapping] = useState<ColumnMapping>({
     date: '',
     description: '',
     amount: '',
-    category: ''
+    income: '',
+    expense: '',
+    category: '',
+    incomeDescription: '',
+    expenseDescription: '',
+    incomeCategory: '',
+    expenseCategory: '',
+    startRow: 2,
+    endRow: undefined
   });
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -39,7 +49,6 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onUpload, isLoading, err
 
   const guessMapping = (cols: ExcelColumn[]): ColumnMapping => {
     const findIndex = (regex: RegExp) => {
-      // Defensive check for undefined cols or headers
       if (!cols) return '';
       const match = cols.find(c => c.header && regex.test(c.header));
       return match ? String(match.index) : '';
@@ -49,8 +58,11 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onUpload, isLoading, err
       date: findIndex(/date/i),
       description: findIndex(/description|desc|name/i),
       amount: findIndex(/amount|value|cost/i),
+      income: findIndex(/income|credit|deposit/i),
+      expense: findIndex(/expense|debit|withdrawal/i),
       category: findIndex(/category|type/i),
-      account: findIndex(/account|bank|source/i)
+      account: findIndex(/account|bank|source/i),
+      startRow: 2 // Default to row 2
     };
   };
 
@@ -58,7 +70,16 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onUpload, isLoading, err
     try {
       const cols = await getExcelColumns(fileToLoad, sheetName);
       setColumns(cols);
-      setMapping(guessMapping(cols));
+      const guessed = guessMapping(cols);
+      setMapping(prev => ({...prev, ...guessed}));
+      
+      // Auto-detect mode if income/expense columns seem to exist
+      if (!guessed.amount && (guessed.income || guessed.expense)) {
+        setAmountMode('split');
+      } else {
+        setAmountMode('single');
+      }
+
       setStep('mapping');
     } catch (e) {
       console.error("Failed to read sheet columns", e);
@@ -105,7 +126,11 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onUpload, isLoading, err
   };
 
   const handleConfirmImport = () => {
-    if (file && mapping.amount && (mapping.date || defaultDate)) {
+    const isValid = amountMode === 'single' 
+      ? !!mapping.amount 
+      : (!!mapping.income || !!mapping.expense);
+
+    if (file && isValid && (mapping.date || defaultDate)) {
       onUpload(file, accountName, mapping, selectedSheet, defaultDate);
     }
   };
@@ -115,32 +140,34 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onUpload, isLoading, err
     setFile(null);
     setColumns([]);
     setSheets([]);
-    setMapping({ date: '', description: '', amount: '', category: '' });
+    setMapping({ date: '', description: '', amount: '', income: '', expense: '', category: '', startRow: 2 });
   };
 
   // Render Helpers
   const renderColumnSelect = (
     label: string, 
-    value: string, 
+    value: string | undefined, 
     onChange: (val: string) => void,
-    required = false
+    required = false,
+    helperText?: string
   ) => (
     <div>
       <label className="block text-xs font-semibold text-slate-500 mb-1">
         {label} {required && '*'}
       </label>
       <select 
-        value={value}
+        value={value || ''}
         onChange={(e) => onChange(e.target.value)}
         className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white text-sm"
       >
-        <option value="">{required ? 'Select Column...' : '(None)'}</option>
+        <option value="">{required ? 'Select Column...' : '(None / Use Default)'}</option>
         {columns.map(col => (
           <option key={col.index} value={col.index}>
             Column {col.letter} {col.header ? `— ${col.header}` : ''}
           </option>
         ))}
       </select>
+      {helperText && <p className="text-[10px] text-slate-400 mt-1">{helperText}</p>}
     </div>
   );
 
@@ -214,22 +241,30 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onUpload, isLoading, err
           </span>
         </div>
         
-        <p className="text-sm text-slate-500 mb-6">
-          Match the Excel columns to the correct fields. 
-        </p>
+        {/* Column Mode Toggle */}
+        <div className="mb-6 bg-white p-1 rounded-lg border border-slate-200 inline-flex">
+           <button
+             onClick={() => setAmountMode('single')}
+             className={`px-3 py-1.5 text-xs font-medium rounded-md flex items-center transition-colors ${amountMode === 'single' ? 'bg-blue-50 text-blue-700 border border-blue-100' : 'text-slate-500 hover:text-slate-700'}`}
+           >
+             <Columns className="w-3 h-3 mr-1.5" /> Single Amount Column
+           </button>
+           <button
+             onClick={() => setAmountMode('split')}
+             className={`px-3 py-1.5 text-xs font-medium rounded-md flex items-center transition-colors ${amountMode === 'split' ? 'bg-blue-50 text-blue-700 border border-blue-100' : 'text-slate-500 hover:text-slate-700'}`}
+           >
+             <Columns className="w-3 h-3 mr-1.5" /> Separate Income/Expense
+           </button>
+        </div>
 
-        <div className="space-y-4 mb-8">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-             {renderColumnSelect("Amount Column", mapping.amount, v => setMapping({...mapping, amount: v}), true)}
-             {renderColumnSelect("Description Column", mapping.description, v => setMapping({...mapping, description: v}))}
-             {renderColumnSelect("Category Column", mapping.category, v => setMapping({...mapping, category: v}))}
-             
-             {/* Date Logic - Mapped OR Default */}
-             <div className="md:col-span-2 border-t border-slate-200 pt-4 mt-2">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {renderColumnSelect("Date Column", mapping.date, v => setMapping({...mapping, date: v}))}
-                  
-                  <div>
+        <div className="space-y-6 mb-8 h-96 overflow-y-auto pr-2 custom-scrollbar">
+          
+          {/* Section: Common Fields */}
+          <div className="space-y-4">
+              <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100 pb-2">Common Fields</h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {renderColumnSelect("Date Column", mapping.date, v => setMapping({...mapping, date: v}))}
+                <div>
                     <label className="block text-xs font-semibold text-slate-500 mb-1">
                       Default Date (Fallback)
                     </label>
@@ -242,16 +277,92 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onUpload, isLoading, err
                          className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white text-sm"
                        />
                     </div>
-                    <p className="text-[10px] text-slate-400 mt-1">
-                      Used if the Date Column is unmapped or a row has a missing date.
-                    </p>
-                  </div>
+                </div>
+                {amountMode === 'single' && (
+                  <>
+                    {renderColumnSelect("Description", mapping.description, v => setMapping({...mapping, description: v}))}
+                    {renderColumnSelect("Category", mapping.category, v => setMapping({...mapping, category: v}))}
+                  </>
+                )}
+              </div>
+          </div>
+
+          {/* Section: Amounts & Specifics */}
+          <div className="space-y-4">
+             <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100 pb-2">Transaction Values</h4>
+             
+             {amountMode === 'single' ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                   {renderColumnSelect("Amount Column", mapping.amount, v => setMapping({...mapping, amount: v}), true)}
+                </div>
+             ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-slate-100 p-4 rounded-lg">
+                   {/* Income Group */}
+                   <div className="space-y-3">
+                      <div className="flex items-center text-emerald-600 font-semibold text-sm">
+                         Income Mapping
+                      </div>
+                      {renderColumnSelect("Amount Column", mapping.income, v => setMapping({...mapping, income: v}), !mapping.expense)}
+                      {renderColumnSelect("Description (Optional)", mapping.incomeDescription, v => setMapping({...mapping, incomeDescription: v}), false, "Overrides default description")}
+                      {renderColumnSelect("Category (Optional)", mapping.incomeCategory, v => setMapping({...mapping, incomeCategory: v}), false, "Overrides default category")}
+                   </div>
+                   
+                   {/* Expense Group */}
+                   <div className="space-y-3">
+                      <div className="flex items-center text-red-600 font-semibold text-sm">
+                         Expense Mapping
+                      </div>
+                      {renderColumnSelect("Amount Column", mapping.expense, v => setMapping({...mapping, expense: v}), !mapping.income)}
+                      {renderColumnSelect("Description (Optional)", mapping.expenseDescription, v => setMapping({...mapping, expenseDescription: v}), false, "Overrides default description")}
+                      {renderColumnSelect("Category (Optional)", mapping.expenseCategory, v => setMapping({...mapping, expenseCategory: v}), false, "Overrides default category")}
+                   </div>
+                   
+                   <p className="text-[10px] text-slate-400 md:col-span-2 text-center">
+                     For rows where an amount exists in both columns, both fields are checked.
+                   </p>
+                </div>
+             )}
+
+             {amountMode === 'split' && (
+               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
+                  {renderColumnSelect("Default Description", mapping.description, v => setMapping({...mapping, description: v}), false, "Used if specific column empty")}
+                  {renderColumnSelect("Default Category", mapping.category, v => setMapping({...mapping, category: v}), false, "Used if specific column empty")}
+               </div>
+             )}
+          </div>
+
+          {/* Section: Row Selection */}
+          <div className="space-y-4">
+             <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100 pb-2">Row Selection</h4>
+             <div className="grid grid-cols-2 gap-4">
+                <div>
+                   <label className="block text-xs font-semibold text-slate-500 mb-1">Start Row</label>
+                   <input 
+                     type="number"
+                     min="1"
+                     value={mapping.startRow || 1}
+                     onChange={(e) => setMapping({...mapping, startRow: parseInt(e.target.value) || 1})}
+                     className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white text-sm"
+                   />
+                </div>
+                <div>
+                   <label className="block text-xs font-semibold text-slate-500 mb-1">End Row (Optional)</label>
+                   <input 
+                     type="number"
+                     min="1"
+                     placeholder="End of file"
+                     value={mapping.endRow || ''}
+                     onChange={(e) => setMapping({...mapping, endRow: e.target.value ? parseInt(e.target.value) : undefined})}
+                     className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white text-sm"
+                   />
                 </div>
              </div>
+          </div>
 
-             <div className="md:col-span-2 border-t border-slate-200 pt-4 mt-2">
-               <label className="block text-xs font-semibold text-slate-500 mb-1">Account Column (Optional)</label>
-               <div className="flex gap-4">
+          {/* Section: Account */}
+          <div className="space-y-4">
+             <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100 pb-2">Account Assignment</h4>
+             <div className="flex gap-4">
                  <div className="flex-1">
                    <select 
                      value={mapping.account || ''}
@@ -274,7 +385,6 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onUpload, isLoading, err
                     className="flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white text-sm"
                     disabled={!!mapping.account}
                  />
-               </div>
              </div>
           </div>
         </div>
@@ -291,7 +401,12 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onUpload, isLoading, err
           </button>
           <button 
             onClick={handleConfirmImport}
-            disabled={!mapping.amount || (!mapping.date && !defaultDate) || isLoading}
+            disabled={
+              (amountMode === 'single' && !mapping.amount) ||
+              (amountMode === 'split' && !mapping.income && !mapping.expense) || 
+              (!mapping.date && !defaultDate) || 
+              isLoading
+            }
             className="flex items-center px-6 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Upload className="w-4 h-4 mr-2" />}
@@ -308,7 +423,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onUpload, isLoading, err
     );
   }
 
-  // Step 1: File Upload
+  // Step 1: File Upload (Unchanged logic, just keeping structure)
   return (
     <div className="w-full max-w-2xl mx-auto p-6">
       <div
