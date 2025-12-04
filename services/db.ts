@@ -166,6 +166,179 @@ export const resetDB = async () => {
   await saveDB();
 };
 
+export const importDatabase = async (file: File): Promise<void> => {
+  if (!SQL) throw new Error("SQL.js not initialized");
+
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      try {
+        const buffer = e.target?.result as ArrayBuffer;
+        if (!buffer) {
+            reject(new Error("Failed to read file"));
+            return;
+        }
+        
+        const u8 = new Uint8Array(buffer);
+        
+        // Validate it's a valid SQLite database
+        try {
+            const testDb = new SQL.Database(u8);
+            testDb.close();
+        } catch (e) {
+            reject(new Error("Invalid SQLite database file"));
+            return;
+        }
+
+        // Close existing if open
+        if (db) {
+            try { db.close(); } catch(e) {}
+        }
+
+        db = new SQL.Database(u8);
+        
+        // Ensure schema is compatible with current version of app
+        migrateSchema();
+        
+        await saveDB();
+        resolve();
+      } catch (err) {
+        reject(err);
+      }
+    };
+    reader.onerror = () => reject(new Error("Failed to read file"));
+    reader.readAsArrayBuffer(file);
+  });
+};
+
+export const getTransactionCount = (): number => {
+  if (!db) return 0;
+  try {
+    const res = db.exec("SELECT count(*) FROM transactions");
+    if (res.length > 0) {
+        return res[0].values[0][0];
+    }
+    return 0;
+  } catch(e) {
+    return 0;
+  }
+};
+
+export const generateDummyData = async () => {
+  if (!db) return;
+
+  const accounts = ['Main Checking', 'Savings', 'Visa Card'];
+  const categories = [
+    { name: 'Salary', type: TransactionType.INCOME, group: 'Recurring' },
+    { name: 'Rent', type: TransactionType.EXPENSE, group: 'Recurring' },
+    { name: 'Utilities', type: TransactionType.EXPENSE, group: 'Recurring' },
+    { name: 'Internet', type: TransactionType.EXPENSE, group: 'Recurring' },
+    { name: 'Groceries', type: TransactionType.EXPENSE, group: 'General' },
+    { name: 'Dining Out', type: TransactionType.EXPENSE, group: 'General' },
+    { name: 'Transport', type: TransactionType.EXPENSE, group: 'General' },
+    { name: 'Entertainment', type: TransactionType.EXPENSE, group: 'General' },
+    { name: 'Shopping', type: TransactionType.EXPENSE, group: 'General' },
+    { name: 'Freelance', type: TransactionType.INCOME, group: 'General' },
+  ];
+
+  const transactions: Transaction[] = [];
+  const today = new Date();
+  
+  // Generate data for past 90 days
+  for (let i = 0; i < 90; i++) {
+    const date = new Date(today);
+    date.setDate(date.getDate() - i);
+    const dateStr = date.toISOString();
+    const day = date.getDate();
+
+    // 1. Monthly Recurring Items
+    if (day === 1) {
+        transactions.push({
+            id: `dummy-rent-${i}`,
+            date: dateStr,
+            description: 'Monthly Rent',
+            amount: -1200,
+            category: 'Rent',
+            type: TransactionType.EXPENSE,
+            account: 'Main Checking'
+        });
+    }
+    if (day === 28) {
+        transactions.push({
+            id: `dummy-salary-${i}`,
+            date: dateStr,
+            description: 'Monthly Salary',
+            amount: 3500,
+            category: 'Salary',
+            type: TransactionType.INCOME,
+            account: 'Main Checking'
+        });
+    }
+    if (day === 15) {
+        transactions.push({
+            id: `dummy-utils-${i}`,
+            date: dateStr,
+            description: 'Electric & Internet',
+            amount: -150,
+            category: 'Utilities',
+            type: TransactionType.EXPENSE,
+            account: 'Main Checking'
+        });
+    }
+
+    // 2. Random Daily Expenses
+    // 40% chance of grocery shopping
+    if (Math.random() > 0.6) {
+        transactions.push({
+            id: `dummy-groc-${i}`,
+            date: dateStr,
+            description: 'Supermarket Purchase',
+            amount: -(Math.floor(Math.random() * 80) + 20),
+            category: 'Groceries',
+            type: TransactionType.EXPENSE,
+            account: Math.random() > 0.5 ? 'Main Checking' : 'Visa Card'
+        });
+    }
+
+    // 30% chance of dining out
+    if (Math.random() > 0.7) {
+        transactions.push({
+            id: `dummy-dine-${i}`,
+            date: dateStr,
+            description: 'Restaurant / Cafe',
+            amount: -(Math.floor(Math.random() * 60) + 10),
+            category: 'Dining Out',
+            type: TransactionType.EXPENSE,
+            account: 'Visa Card'
+        });
+    }
+
+    // 20% chance of transport
+    if (Math.random() > 0.8) {
+        transactions.push({
+            id: `dummy-trans-${i}`,
+            date: dateStr,
+            description: 'Uber / Public Transport',
+            amount: -(Math.floor(Math.random() * 30) + 5),
+            category: 'Transport',
+            type: TransactionType.EXPENSE,
+            account: 'Visa Card'
+        });
+    }
+  }
+
+  // Insert using the standard function to populate metadata tables automatically
+  await insertTransactions(transactions);
+
+  // Manually update groups for the dummy categories since insertTransactions defaults to 'General'
+  db.run("BEGIN TRANSACTION");
+  categories.forEach(c => {
+    db.run("UPDATE categories SET group_name = ?, type = ? WHERE name = ?", [c.group, c.type, c.name]);
+  });
+  db.run("COMMIT");
+  await saveDB();
+};
+
 // --- Transactions ---
 
 export const insertTransactions = async (transactions: Transaction[]) => {
@@ -344,8 +517,51 @@ export const updateAccount = async (oldName: string, newName: string) => {
   await saveDB();
 };
 
+export const deleteCategory = async (id: string): Promise<boolean> => {
+  if (!db) return false;
+  
+  // 1. Get the category name first
+  const res = db.exec("SELECT name FROM categories WHERE id = ?", [id]);
+  if (res.length === 0) return false;
+  const name = res[0].values[0][0];
+
+  // 2. Check usage in transactions
+  const countRes = db.exec("SELECT count(*) FROM transactions WHERE category = ?", [name]);
+  const count = countRes[0].values[0][0];
+
+  if (count > 0) {
+    throw new Error(`Cannot delete category "${name}" because it is used in ${count} transaction(s). Please reassign them first.`);
+  }
+
+  // 3. Delete
+  db.run("DELETE FROM categories WHERE id = ?", [id]);
+  await saveDB();
+  return true;
+};
+
+export const deleteAccount = async (id: string): Promise<boolean> => {
+  if (!db) return false;
+
+  // 1. Get name
+  const res = db.exec("SELECT name FROM accounts WHERE id = ?", [id]);
+  if (res.length === 0) return false;
+  const name = res[0].values[0][0];
+
+  // 2. Check usage
+  const countRes = db.exec("SELECT count(*) FROM transactions WHERE account = ?", [name]);
+  const count = countRes[0].values[0][0];
+
+  if (count > 0) {
+    throw new Error(`Cannot delete account "${name}" because it contains ${count} transaction(s).`);
+  }
+
+  db.run("DELETE FROM accounts WHERE id = ?", [id]);
+  await saveDB();
+  return true;
+};
+
+// Legacy support wrapper
 export const renameCategory = async (oldName: string, newName: string) => {
-  // Legacy support wrapper, assumes General/Expense if unknown, but usually updateCategory is called
   const cats = getCategories();
   const cat = cats.find(c => c.name === oldName);
   await updateCategory(oldName, newName, cat?.type || 'Expense', cat?.group || 'General');

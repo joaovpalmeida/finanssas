@@ -8,7 +8,7 @@ import { AddTransactionModal } from './components/AddTransactionModal';
 import { TransactionSearch } from './components/TransactionSearch';
 import { parseExcelFile, ColumnMapping } from './utils/excelParser';
 import { Transaction, Account, Category } from './types';
-import { initDB, insertTransactions, getAllTransactions, resetDB, exportDatabaseBlob, deleteTransaction, getAccounts, getCategories } from './services/db';
+import { initDB, insertTransactions, getAllTransactions, resetDB, exportDatabaseBlob, deleteTransaction, getAccounts, getCategories, importDatabase } from './services/db';
 import { calculateRunningBalances, formatCurrency, aggregateData } from './utils/helpers';
 
 function App() {
@@ -53,17 +53,16 @@ function App() {
     return aggregateData(transactions, categories).accountBalances;
   }, [transactions, categories]);
 
-  const handleFileUpload = async (file: File, accountName: string, mapping: ColumnMapping, sheetName: string, defaultDate: string) => {
+  const handleFileUpload = async (data: Transaction[]) => {
     setIsLoading(true);
     setError(null);
     try {
-      const data = await parseExcelFile(file, accountName, mapping, sheetName, defaultDate);
       await insertTransactions(data); // Save to SQLite and auto-create categories/accounts
       refreshTransactions();
-      alert(`Successfully imported ${data.length} transactions from sheet "${sheetName}".`);
+      alert(`Successfully imported ${data.length} transactions.`);
     } catch (err) {
       console.error(err);
-      setError("Failed to parse the file. Please ensure it's a valid Excel file and columns are mapped correctly.");
+      setError("Failed to save transactions to database.");
     } finally {
       setIsLoading(false);
     }
@@ -106,6 +105,22 @@ function App() {
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
+    }
+  };
+
+  const handleRestore = async (file: File) => {
+    if (confirm("This will overwrite your current data with the backup. Continue?")) {
+        setIsLoading(true);
+        try {
+            await importDatabase(file);
+            refreshTransactions();
+            alert("Database restored successfully.");
+        } catch (e: any) {
+            console.error(e);
+            alert("Failed to restore database: " + e.message);
+        } finally {
+            setIsLoading(false);
+        }
     }
   };
 
@@ -210,6 +225,7 @@ function App() {
           {activeTab === 'admin' && (
             <AdminPage 
               onBackup={handleBackup} 
+              onRestore={handleRestore}
               onReset={handleReset} 
               onRefresh={refreshTransactions}
               onUpload={handleFileUpload}

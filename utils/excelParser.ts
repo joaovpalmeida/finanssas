@@ -8,6 +8,10 @@ export interface ColumnMapping {
   description: string;
   category: string;
   
+  // Manual Fallbacks
+  manualDescription?: string;
+  manualCategory?: string;
+  
   // Single Amount Mode
   amount?: string;
 
@@ -20,6 +24,10 @@ export interface ColumnMapping {
   expenseDescription?: string;
   incomeCategory?: string;
   expenseCategory?: string;
+  
+  // Manual Specific Overrides
+  manualIncomeCategory?: string;
+  manualExpenseCategory?: string;
   
   account?: string;
 
@@ -210,16 +218,45 @@ export const parseExcelFile = (
         };
 
         // Helper function to create transaction
-        const createTxn = (row: any[], amount: number, type: TransactionType, specificDescIdx: number, specificCatIdx: number, rowIndex: number) => {
-            const descIdx = specificDescIdx !== -1 ? specificDescIdx : descIndex;
-            const catIdx = specificCatIdx !== -1 ? specificCatIdx : categoryIndex;
+        const createTxn = (
+          row: any[], 
+          amount: number, 
+          type: TransactionType, 
+          specificDescIdx: number, 
+          specificCatIdx: number, 
+          rowIndex: number,
+          specificManualCategory?: string
+        ) => {
+            // Determine Description
+            // Priority: Specific Column -> Common Column -> Manual Value -> 'Unspecified'
+            let description = 'Unspecified';
+            if (specificDescIdx !== -1 && row[specificDescIdx]) {
+                description = String(row[specificDescIdx]);
+            } else if (descIndex !== -1 && row[descIndex]) {
+                description = String(row[descIndex]);
+            } else if (mapping?.manualDescription) {
+                description = mapping.manualDescription;
+            }
+
+            // Determine Category
+            // Priority: Specific Column -> Specific Manual -> Common Column -> Common Manual -> 'Uncategorized'
+            let category = 'Uncategorized';
+            if (specificCatIdx !== -1 && row[specificCatIdx]) {
+                category = String(row[specificCatIdx]);
+            } else if (specificManualCategory) {
+                category = specificManualCategory;
+            } else if (categoryIndex !== -1 && row[categoryIndex]) {
+                category = String(row[categoryIndex]);
+            } else if (mapping?.manualCategory) {
+                category = mapping.manualCategory;
+            }
             
             return {
                 id: `txn-${Date.now()}-${rowIndex}-${Math.random()}`,
                 date: extractDate(row),
-                description: (descIdx !== -1 && row[descIdx]) ? String(row[descIdx]) : 'Unspecified',
+                description: description,
                 amount: amount,
-                category: (catIdx !== -1 && row[catIdx]) ? String(row[catIdx]) : 'Uncategorized',
+                category: category,
                 type: type,
                 account: (accountIndex !== -1 && row[accountIndex]) ? String(row[accountIndex]) : defaultAccountName
             };
@@ -244,7 +281,15 @@ export const parseExcelFile = (
                          const val = parseFloat(String(rawVal).replace(/[^0-9.-]/g, ''));
                          if (!isNaN(val) && val !== 0) {
                              // Income is always positive absolute value
-                             transactions.push(createTxn(row, Math.abs(val), TransactionType.INCOME, incomeDescIndex, incomeCatIndex, i));
+                             transactions.push(createTxn(
+                               row, 
+                               Math.abs(val), 
+                               TransactionType.INCOME, 
+                               incomeDescIndex, 
+                               incomeCatIndex, 
+                               i, 
+                               mapping?.manualIncomeCategory
+                             ));
                          }
                     }
                 }
@@ -264,7 +309,15 @@ export const parseExcelFile = (
                          const val = parseFloat(String(rawVal).replace(/[^0-9.-]/g, ''));
                          if (!isNaN(val) && val !== 0) {
                              // Expense is always negative absolute value
-                             transactions.push(createTxn(row, -Math.abs(val), TransactionType.EXPENSE, expenseDescIndex, expenseCatIndex, i));
+                             transactions.push(createTxn(
+                               row, 
+                               -Math.abs(val), 
+                               TransactionType.EXPENSE, 
+                               expenseDescIndex, 
+                               expenseCatIndex, 
+                               i,
+                               mapping?.manualExpenseCategory
+                             ));
                          }
                     }
                 }
