@@ -189,11 +189,20 @@ export const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, 
     return balanceSummary.accountBalances.reduce((acc, curr) => acc + curr.balance, 0);
   }, [balanceSummary]);
 
-  // Calculate Savings Rate
+  // Calculate Savings Rate based on net flow into Savings Accounts
   const savingsRate = useMemo(() => {
     if (periodSummary.totalIncome === 0) return 0;
-    return (periodSummary.netSavings / periodSummary.totalIncome) * 100;
-  }, [periodSummary]);
+    
+    // Sum of all transactions linked to savings accounts in the current period
+    const savingsFlow = filteredTransactions.reduce((sum, t) => {
+      if (savingsAccountNames.has(t.account)) {
+        return sum + t.amount;
+      }
+      return sum;
+    }, 0);
+
+    return (savingsFlow / periodSummary.totalIncome) * 100;
+  }, [periodSummary, filteredTransactions, savingsAccountNames]);
 
   // Helper to get breakdown for the detailed view
   const detailedBreakdown = useMemo(() => {
@@ -339,6 +348,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, 
             colorClass="bg-purple-100"
             privacyMode={privacyMode}
             isPercentage
+            tooltip="Percentage of income transferred to or earned in Savings Accounts"
           />
         )}
         <StatCard 
