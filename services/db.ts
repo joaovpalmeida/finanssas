@@ -303,6 +303,7 @@ export const generateDummyData = async () => {
     { name: 'Entertainment', type: TransactionType.EXPENSE, group: 'General' },
     { name: 'Shopping', type: TransactionType.EXPENSE, group: 'General' },
     { name: 'Freelance', type: TransactionType.INCOME, group: 'General' },
+    { name: 'Transfer', type: TransactionType.TRANSFER, group: 'General' },
   ];
 
   const transactions: Transaction[] = [];
@@ -350,7 +351,31 @@ export const generateDummyData = async () => {
         });
     }
 
-    // 2. Random Daily Expenses
+    // 2. Monthly Savings Transfer
+    if (day === 2) {
+        // Out from Checking
+        transactions.push({
+            id: `dummy-tr-out-${i}`,
+            date: dateStr,
+            description: 'Transfer to Savings',
+            amount: -800,
+            category: 'Transfer',
+            type: TransactionType.TRANSFER,
+            account: 'Main Checking'
+        });
+        // In to Savings
+        transactions.push({
+            id: `dummy-tr-in-${i}`,
+            date: dateStr,
+            description: 'Transfer from Checking',
+            amount: 800,
+            category: 'Transfer',
+            type: TransactionType.TRANSFER,
+            account: 'Savings'
+        });
+    }
+
+    // 3. Random Daily Expenses
     // 40% chance of grocery shopping
     if (Math.random() > 0.6) {
         transactions.push({

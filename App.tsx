@@ -265,6 +265,7 @@ function App() {
             <Dashboard 
               transactions={transactions} 
               categories={categories}
+              accounts={accounts}
               onEdit={handleEditClick}
               onDelete={(id) => { 
                   if(confirm("Are you sure?")) handleDeleteTransaction(id); 

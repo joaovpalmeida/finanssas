@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { X, Save, Calendar, Tag, CreditCard, DollarSign, Type, ArrowRightLeft, ArrowUpCircle, ArrowDownCircle, ArrowRight } from 'lucide-react';
+import React, { useState, useEffect, useMemo, useId } from 'react';
+import { X, Save, Calendar, Tag, CreditCard, DollarSign, Type, ArrowRightLeft, ArrowUpCircle, ArrowDownCircle, ArrowRight, ChevronDown, List, Plus } from 'lucide-react';
 import { Transaction, TransactionType, Category, Account } from '../types';
 
 interface AddTransactionModalProps {
@@ -10,6 +10,102 @@ interface AddTransactionModalProps {
   accounts: Account[];
   initialData?: Partial<Transaction> | null;
 }
+
+const AccountField = ({ 
+  label, 
+  value, 
+  onChange, 
+  accounts, 
+  placeholder,
+  icon: Icon,
+  allowCreation = true
+}: {
+  label: string,
+  value: string,
+  onChange: (val: string) => void,
+  accounts: Account[],
+  placeholder: string,
+  icon?: React.ElementType,
+  allowCreation?: boolean
+}) => {
+  // Default to 'select' if we have accounts, otherwise 'input' (though usually we have accounts)
+  // If allowCreation is false, we force 'select' mode.
+  const [mode, setMode] = useState<'select' | 'input'>('select');
+
+  useEffect(() => {
+    if (!allowCreation) {
+      setMode('select');
+    }
+  }, [allowCreation]);
+
+  const savings = accounts.filter(a => a.isSavings);
+  const regular = accounts.filter(a => !a.isSavings);
+
+  return (
+    <div>
+      <div className="flex justify-between items-end mb-1">
+        <label className="block text-xs font-semibold text-slate-500">{label}</label>
+        {allowCreation && (
+          <button
+            type="button"
+            onClick={() => setMode(mode === 'select' ? 'input' : 'select')}
+            className="text-[10px] text-blue-600 hover:text-blue-700 flex items-center bg-blue-50 px-2 py-0.5 rounded transition-colors"
+          >
+            {mode === 'select' ? (
+              <>
+                <Plus className="w-3 h-3 mr-1" /> Type New
+              </>
+            ) : (
+              <>
+                <List className="w-3 h-3 mr-1" /> Select Existing
+              </>
+            )}
+          </button>
+        )}
+      </div>
+      
+      <div className="relative">
+        {Icon && <Icon className="absolute left-3 top-2.5 w-4 h-4 text-slate-400 z-10 pointer-events-none" />}
+        
+        {mode === 'select' ? (
+          <div className="relative">
+             <select
+                value={value}
+                onChange={(e) => onChange(e.target.value)}
+                className={`w-full ${Icon ? 'pl-9' : 'px-3'} pr-8 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white text-slate-800 text-sm appearance-none cursor-pointer`}
+                required
+             >
+                <option value="" disabled>Select account...</option>
+                {savings.length > 0 && (
+                  <optgroup label="Savings Accounts">
+                    {savings.map(a => <option key={a.id} value={a.name}>{a.name}</option>)}
+                  </optgroup>
+                )}
+                {regular.length > 0 && (
+                  <optgroup label="Regular Accounts">
+                    {regular.map(a => <option key={a.id} value={a.name}>{a.name}</option>)}
+                  </optgroup>
+                )}
+             </select>
+             <div className="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none text-slate-500">
+               <ChevronDown className="w-4 h-4" />
+             </div>
+          </div>
+        ) : (
+          <input
+              type="text"
+              value={value}
+              onChange={(e) => onChange(e.target.value)}
+              className={`w-full ${Icon ? 'pl-9' : 'px-3'} pr-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white text-slate-800 text-sm`}
+              placeholder={placeholder}
+              required
+              autoFocus
+          />
+        )}
+      </div>
+    </div>
+  );
+};
 
 export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
   isOpen,
@@ -56,30 +152,66 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
         setToAccount(''); // Not used in edit mode for single record
       } else {
         // Brand new transaction
+        // Default to first account if available
+        const defaultAccount = accounts.length > 0 ? accounts[0].name : '';
         setFormData({
           date: new Date().toISOString().split('T')[0],
           description: '',
           amount: '',
           category: '',
           type: initialData?.type || TransactionType.EXPENSE,
-          account: initialData?.account || (accounts.length > 0 ? accounts[0].name : '')
+          account: initialData?.account || defaultAccount
         });
         setTransferDir('out');
-        setToAccount(accounts.length > 1 ? accounts[1].name : '');
+        
+        // Default destination account (different from source if possible)
+        const defaultSource = initialData?.account || defaultAccount;
+        const availableDest = accounts.find(a => a.name !== defaultSource);
+        setToAccount(availableDest ? availableDest.name : '');
       }
     }
   }, [isOpen, initialData, accounts]);
+
+  // Ensure To Account is not the same as From Account when changing From Account
+  useEffect(() => {
+    if (!isEditing && formData.type === TransactionType.TRANSFER && formData.account === toAccount) {
+        const other = accounts.find(a => a.name !== formData.account);
+        if (other) setToAccount(other.name);
+    }
+  }, [formData.account, formData.type, isEditing, accounts]);
 
   // Filter categories based on selected Transaction Type
   const filteredCategories = useMemo(() => {
     return categories.filter(c => c.type === formData.type);
   }, [categories, formData.type]);
 
+  // Filter accounts for destination to exclude source
+  const destinationAccounts = useMemo(() => {
+    return accounts.filter(a => a.name !== formData.account);
+  }, [accounts, formData.account]);
+
   if (!isOpen) return null;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.amount) return;
+
+    // Validation: Strict Account Existence for Transfers
+    if (formData.type === TransactionType.TRANSFER) {
+        const sourceExists = accounts.some(a => a.name === formData.account);
+        if (!sourceExists) {
+            alert("For transfers, you must select an existing account.");
+            return;
+        }
+        
+        if (!isEditing) {
+            const destExists = accounts.some(a => a.name === toAccount);
+            if (!destExists) {
+                alert("Destination account must exist.");
+                return;
+            }
+        }
+    }
 
     // Calculate final date with time
     let finalDate: string;
@@ -99,6 +231,13 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
     // If adding a new Transfer, we create two transactions: one out, one in
     if (!isEditing && formData.type === TransactionType.TRANSFER) {
         const amount = Math.abs(finalAmount);
+        const sourceAcc = formData.account || 'Cash';
+        const destAcc = toAccount || 'Cash';
+
+        if (sourceAcc === destAcc) {
+            alert("Source and Destination accounts cannot be the same.");
+            return;
+        }
         
         // 1. Outflow from "Account" (Source)
         const txnOut: Transaction = {
@@ -108,7 +247,7 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
             amount: -amount,
             category: formData.category || 'Transfer',
             type: TransactionType.TRANSFER,
-            account: formData.account || 'Cash'
+            account: sourceAcc
         };
 
         // 2. Inflow to "To Account" (Destination)
@@ -119,7 +258,7 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
             amount: amount,
             category: formData.category || 'Transfer',
             type: TransactionType.TRANSFER,
-            account: toAccount || 'Cash'
+            account: destAcc
         };
 
         onSave([txnOut, txnIn]);
@@ -243,61 +382,41 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
           {(!isEditing && formData.type === TransactionType.TRANSFER) ? (
              <div className="grid grid-cols-[1fr_auto_1fr] gap-2 items-end">
                 {/* From Account */}
-                <div>
-                    <label className="block text-xs font-semibold text-slate-500 mb-1">From Account</label>
-                    <input
-                        type="text"
-                        list="accounts-list"
-                        required
-                        value={formData.account}
-                        onChange={e => setFormData({ ...formData, account: e.target.value })}
-                        className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white text-slate-800 text-sm"
-                        placeholder="Source"
-                    />
-                </div>
+                <AccountField 
+                  label="From Account"
+                  value={formData.account}
+                  onChange={(val: string) => setFormData({ ...formData, account: val })}
+                  accounts={accounts}
+                  placeholder="Source"
+                  allowCreation={false}
+                />
                 
-                <div className="pb-2 text-slate-400">
-                    <ArrowRight className="w-5 h-5" />
+                <div className="pb-2 text-slate-400 flex justify-center">
+                    <ArrowRight className="w-5 h-5 mb-1" />
                 </div>
 
-                {/* To Account */}
-                <div>
-                    <label className="block text-xs font-semibold text-slate-500 mb-1">To Account</label>
-                    <input
-                        type="text"
-                        list="accounts-list"
-                        required
-                        value={toAccount}
-                        onChange={e => setToAccount(e.target.value)}
-                        className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white text-slate-800 text-sm"
-                        placeholder="Destination"
-                    />
-                </div>
+                {/* To Account (Filtered to exclude source) */}
+                <AccountField 
+                  label="To Account"
+                  value={toAccount}
+                  onChange={(val: string) => setToAccount(val)}
+                  accounts={destinationAccounts}
+                  placeholder="Destination"
+                  allowCreation={false}
+                />
              </div>
           ) : (
              /* Standard Account Field */
-             <div>
-                <label className="block text-xs font-semibold text-slate-500 mb-1">Account</label>
-                <div className="relative">
-                <CreditCard className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
-                <input
-                    type="text"
-                    list="accounts-list"
-                    required
-                    value={formData.account}
-                    onChange={e => setFormData({ ...formData, account: e.target.value })}
-                    className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white text-slate-800 text-base sm:text-sm"
-                    placeholder="Select or type new account..."
-                />
-                </div>
-             </div>
+             <AccountField 
+               label="Account"
+               value={formData.account}
+               onChange={(val: string) => setFormData({ ...formData, account: val })}
+               accounts={accounts}
+               placeholder="Select or type new account..."
+               icon={CreditCard}
+               allowCreation={true}
+             />
           )}
-
-          <datalist id="accounts-list">
-            {accounts.map((acc, i) => (
-                <option key={i} value={acc.name} label={acc.isSavings ? "Savings Account" : "Regular Account"} />
-            ))}
-          </datalist>
 
           {/* Description */}
           <div>

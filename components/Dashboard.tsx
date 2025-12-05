@@ -6,7 +6,7 @@ import {
 import { 
   TrendingUp, TrendingDown, DollarSign, Activity, CreditCard, Wallet, Edit2, Trash2,
   ChevronDown, ChevronUp, BarChart3, Layers, ArrowRight, Calendar, Filter, ChevronLeft, ChevronRight,
-  Eye, EyeOff
+  Eye, EyeOff, Info, PiggyBank, PieChart as PieIcon, Percent
 } from 'lucide-react';
 import { Transaction, FinancialSummary, Category, TransactionType, Account } from '../types';
 import { formatCurrency, aggregateData, getMonthYearLabel } from '../utils/helpers';
@@ -21,8 +21,15 @@ interface DashboardProps {
   onNavigateToAdmin: () => void;
 }
 
-const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
-const GROUP_COLORS = ['#6366f1', '#f43f5e']; // Indigo for Recurring, Rose for General
+const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#6366f1', '#14b8a6'];
+
+// Map specific groups to colors
+const GROUP_COLOR_MAP: Record<string, string> = {
+  'Recurring': '#6366f1', // Indigo
+  'General': '#f43f5e',   // Rose
+  'Savings': '#10b981',   // Emerald
+};
+const FALLBACK_COLOR = '#94a3b8'; // Slate
 
 const StatCard: React.FC<{ 
   title: string; 
@@ -30,12 +37,24 @@ const StatCard: React.FC<{
   icon: React.ReactNode; 
   colorClass: string;
   privacyMode: boolean;
-}> = ({ title, amount, icon, colorClass, privacyMode }) => (
-  <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 flex items-center justify-between">
+  tooltip?: string;
+  isPercentage?: boolean;
+}> = ({ title, amount, icon, colorClass, privacyMode, tooltip, isPercentage }) => (
+  <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 flex items-center justify-between group relative">
     <div>
-      <p className="text-sm font-medium text-slate-500 mb-1">{title}</p>
+      <div className="flex items-center space-x-1 mb-1">
+        <p className="text-sm font-medium text-slate-500">{title}</p>
+        {tooltip && (
+          <div className="group/tooltip relative">
+            <Info className="w-3.5 h-3.5 text-slate-400 cursor-help" />
+            <div className="absolute left-0 bottom-full mb-2 hidden group-hover/tooltip:block w-48 p-2 bg-slate-800 text-white text-xs rounded shadow-lg z-10">
+              {tooltip}
+            </div>
+          </div>
+        )}
+      </div>
       <h3 className="text-2xl font-bold text-slate-800">
-        {privacyMode ? '••••••' : formatCurrency(amount)}
+        {privacyMode ? '••••••' : (isPercentage ? `${amount.toFixed(1)}%` : formatCurrency(amount))}
       </h3>
     </div>
     <div className={`p-3 rounded-full ${colorClass} bg-opacity-10`}>
@@ -49,6 +68,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, 
   const [privacyMode, setPrivacyMode] = useState(true); // Default to true (hidden)
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [allocationView, setAllocationView] = useState<'group' | 'category'>('group');
   
   // Initialize filter with current month (YYYY-MM)
   const [dateFilter, setDateFilter] = useState<string>(() => {
@@ -131,6 +151,17 @@ export const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, 
     }, 0);
   }, [overallSummary, savingsAccountNames]);
 
+  // Total Net Worth (Includes Savings)
+  const totalNetWorth = useMemo(() => {
+    return overallSummary.accountBalances.reduce((acc, curr) => acc + curr.balance, 0);
+  }, [overallSummary]);
+
+  // Calculate Savings Rate
+  const savingsRate = useMemo(() => {
+    if (periodSummary.totalIncome === 0) return 0;
+    return (periodSummary.netSavings / periodSummary.totalIncome) * 100;
+  }, [periodSummary]);
+
   // Helper to get breakdown for the detailed view
   const detailedBreakdown = useMemo(() => {
     const groups: Record<string, { total: number, categories: Record<string, number> }> = {};
@@ -151,6 +182,44 @@ export const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, 
 
     return Object.entries(groups).sort((a, b) => b[1].total - a[1].total);
   }, [filteredTransactions, categories]);
+
+  // Calculate Structure Data (Group View) including Savings
+  const structureData = useMemo(() => {
+    // Start with expenses by group
+    const data = [...periodSummary.expenseByGroup];
+    // Calculate net savings (Income - Expenses)
+    const savings = periodSummary.totalIncome - periodSummary.totalExpense;
+    
+    // If we have positive savings, add it to the pie chart data
+    if (savings > 0) {
+      data.push({ name: 'Savings', value: savings });
+    }
+    return data;
+  }, [periodSummary]);
+
+  // Calculate Category Allocation Data (Top Categories + Others + Savings)
+  const categoryAllocationData = useMemo(() => {
+    // 1. Get Top Categories (Limit to top 5)
+    const data = periodSummary.topCategories.map(c => ({ name: c.name, value: c.value }));
+    
+    // 2. Calculate "Others"
+    const topSum = data.reduce((sum, item) => sum + item.value, 0);
+    const otherSum = periodSummary.totalExpense - topSum;
+    
+    if (otherSum > 0) {
+      data.push({ name: 'Others', value: otherSum });
+    }
+
+    // 3. Add Savings
+    const savings = periodSummary.totalIncome - periodSummary.totalExpense;
+    if (savings > 0) {
+      data.push({ name: 'Savings', value: savings });
+    }
+    
+    return data;
+  }, [periodSummary]);
+
+  const activeChartData = allocationView === 'group' ? structureData : categoryAllocationData;
 
   if (transactions.length === 0) {
     return (
@@ -193,6 +262,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, 
               {privacyMode ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
             </button>
 
+            <button 
+              onClick={() => setShowCharts(!showCharts)}
+              className="p-2 text-slate-600 hover:text-blue-600 transition-colors bg-white border border-slate-200 rounded-lg shadow-sm"
+              title={showCharts ? "Hide Charts" : "Show Charts"}
+            >
+              {showCharts ? <ChevronUp className="w-5 h-5" /> : <BarChart3 className="w-5 h-5" />}
+            </button>
+
             <div className="relative">
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                 <Calendar className="h-4 w-4 text-slate-400" />
@@ -211,19 +288,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, 
                 <ChevronDown className="h-4 w-4 text-slate-400" />
               </div>
             </div>
-
-            <button 
-              onClick={() => setShowCharts(!showCharts)}
-              className="flex items-center text-sm text-slate-600 hover:text-blue-600 font-medium transition-colors bg-white border border-slate-200 px-3 py-2 rounded-lg shadow-sm"
-            >
-              {showCharts ? 'Hide Charts' : 'Show Charts'}
-              {showCharts ? <ChevronUp className="w-4 h-4 ml-2" /> : <BarChart3 className="w-4 h-4 ml-2" />}
-            </button>
          </div>
       </div>
 
       {/* Stats Row (Filtered Data) */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6">
         <StatCard 
           title="Income" 
           amount={periodSummary.totalIncome} 
@@ -239,11 +308,20 @@ export const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, 
           privacyMode={privacyMode}
         />
         <StatCard 
-          title="Balance" 
+          title="Savings Rate" 
+          amount={savingsRate} 
+          icon={<Percent className="w-6 h-6 text-purple-600" />} 
+          colorClass="bg-purple-100"
+          privacyMode={privacyMode}
+          isPercentage
+        />
+        <StatCard 
+          title="Available Balance" 
           amount={activeBalance} 
-          icon={<DollarSign className="w-6 h-6 text-blue-600" />} 
+          icon={<Wallet className="w-6 h-6 text-blue-600" />} 
           colorClass="bg-blue-100"
           privacyMode={privacyMode}
+          tooltip="Includes only checking and regular accounts (Savings excluded)"
         />
       </div>
 
@@ -255,15 +333,19 @@ export const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, 
             Current Account Balances
           </div>
           <span className="text-xs font-normal text-slate-400 bg-slate-50 px-2 py-1 rounded">
-             Total Net Worth: {privacyMode ? '••••••' : formatCurrency(overallSummary.accountBalances.reduce((acc, curr) => acc + curr.balance, 0))}
+             Total Net Worth: {privacyMode ? '••••••' : formatCurrency(totalNetWorth)}
           </span>
         </h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {overallSummary.accountBalances.map((acc, idx) => (
             <div key={idx} className="p-4 rounded-lg border border-slate-100 bg-slate-50 flex items-center justify-between">
               <div className="flex items-center space-x-3">
-                <div className="p-2 bg-white rounded-md shadow-sm text-blue-500">
-                  <CreditCard className="w-5 h-5" />
+                <div className={`p-2 bg-white rounded-md shadow-sm ${savingsAccountNames.has(acc.account) ? 'text-indigo-500' : 'text-blue-500'}`}>
+                  {savingsAccountNames.has(acc.account) ? (
+                    <PiggyBank className="w-5 h-5" />
+                  ) : (
+                    <CreditCard className="w-5 h-5" />
+                  )}
                 </div>
                 <div>
                   <p className="text-xs font-medium text-slate-500 uppercase tracking-wide truncate max-w-[120px]" title={acc.account}>
@@ -309,18 +391,34 @@ export const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, 
                   </div>
                 </div>
 
-                {/* Expense Structure (Group) */}
+                {/* Expense Structure / Cash Flow Allocation */}
                 <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
-                  <h3 className="text-lg font-semibold text-slate-800 mb-6 flex items-center">
-                    <Layers className="w-5 h-5 mr-2 text-indigo-500" />
-                    Expense Structure
-                  </h3>
+                  <div className="flex items-center justify-between mb-6">
+                    <h3 className="text-lg font-semibold text-slate-800 flex items-center">
+                      <PieIcon className="w-5 h-5 mr-2 text-indigo-500" />
+                      Cash Flow Allocation
+                    </h3>
+                    <div className="flex bg-slate-100 p-1 rounded-lg">
+                       <button
+                         onClick={() => setAllocationView('group')}
+                         className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${allocationView === 'group' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                       >
+                         Group
+                       </button>
+                       <button
+                         onClick={() => setAllocationView('category')}
+                         className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${allocationView === 'category' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                       >
+                         Category
+                       </button>
+                    </div>
+                  </div>
                   <div className="h-72">
-                    {periodSummary.totalExpense > 0 ? (
+                    {periodSummary.totalIncome > 0 || periodSummary.totalExpense > 0 ? (
                       <ResponsiveContainer width="100%" height="100%">
                         <PieChart>
                           <Pie
-                            data={periodSummary.expenseByGroup}
+                            data={activeChartData}
                             cx="50%"
                             cy="50%"
                             innerRadius={60}
@@ -328,8 +426,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, 
                             paddingAngle={5}
                             dataKey="value"
                           >
-                            {periodSummary.expenseByGroup.map((entry, index) => (
-                              <Cell key={`cell-${index}`} fill={GROUP_COLORS[index % GROUP_COLORS.length]} />
+                            {activeChartData.map((entry, index) => (
+                              <Cell 
+                                key={`cell-${index}`} 
+                                fill={allocationView === 'group' 
+                                  ? (GROUP_COLOR_MAP[entry.name] || FALLBACK_COLOR)
+                                  : (entry.name === 'Savings' ? '#10b981' : COLORS[index % COLORS.length])
+                                } 
+                              />
                             ))}
                           </Pie>
                           <Tooltip formatter={(value) => privacyMode ? '••••••' : formatCurrency(value as number)} />
@@ -338,7 +442,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, 
                       </ResponsiveContainer>
                     ) : (
                       <div className="flex items-center justify-center h-full text-slate-400 text-sm">
-                        No expense data for this period
+                        No financial data for this period
                       </div>
                     )}
                   </div>
@@ -394,7 +498,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, 
         )}
       </div>
 
-       {/* Transaction List (Filtered & Paginated) */}
+       {/* Transaction List (Filtered & Paginated & Grouped by Date) */}
       <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
         <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center">
           <h3 className="font-semibold text-slate-800">Transactions</h3>
@@ -407,7 +511,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, 
           <table className="w-full text-sm text-left">
             <thead className="bg-slate-50 text-slate-500 font-medium">
               <tr>
-                <th className="px-4 sm:px-6 py-3">Date</th>
+                {/* Removed separate Date column */}
                 <th className="px-6 py-3 hidden md:table-cell">Account</th>
                 <th className="px-4 sm:px-6 py-3">Description</th>
                 <th className="px-6 py-3 hidden sm:table-cell">Category</th>
@@ -416,51 +520,73 @@ export const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, 
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {paginatedTransactions.map((t) => (
-                <tr key={t.id} className="hover:bg-slate-50 transition-colors group">
-                  <td className="px-4 sm:px-6 py-3 text-slate-600 whitespace-nowrap">{new Date(t.date).toLocaleDateString()}</td>
-                  <td className="px-6 py-3 text-slate-800 font-medium whitespace-nowrap hidden md:table-cell">{t.account}</td>
-                  <td className="px-4 sm:px-6 py-3 text-slate-800 max-w-[120px] sm:max-w-xs truncate">{t.description}</td>
-                  <td className="px-6 py-3 whitespace-nowrap hidden sm:table-cell">
-                    <span className="px-2 py-1 bg-slate-100 text-slate-600 rounded text-xs">
-                      {t.category}
-                    </span>
-                  </td>
-                  <td className="px-4 sm:px-6 py-3 text-right whitespace-nowrap">
-                    <div className="flex flex-col items-end gap-0.5">
-                      <span className={`font-semibold ${t.type === 'Income' ? 'text-emerald-600' : 'text-slate-800'}`}>
-                        {t.type === 'Income' ? '+' : ''}{formatCurrency(t.amount)}
-                      </span>
-                      {t.balanceAfterTransaction !== undefined && (
-                        <span className="text-xs text-slate-400 font-medium">
-                          {privacyMode ? '••••••' : formatCurrency(t.balanceAfterTransaction)}
+              {paginatedTransactions.map((t, index) => {
+                const dateObj = new Date(t.date);
+                const dateStr = dateObj.toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+                
+                // Compare with previous item in the *paginated* list to determine if header is needed
+                const prevDateStr = index > 0 
+                    ? new Date(paginatedTransactions[index - 1].date).toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
+                    : null;
+                
+                const showHeader = dateStr !== prevDateStr;
+
+                return (
+                  <React.Fragment key={t.id}>
+                    {showHeader && (
+                      <tr className="bg-slate-50/80 border-b border-slate-100">
+                        <td colSpan={5} className="px-4 sm:px-6 py-2 text-xs font-bold text-slate-500 uppercase tracking-wider">
+                          {dateStr}
+                        </td>
+                      </tr>
+                    )}
+                    <tr className="hover:bg-slate-50 transition-colors group">
+                      <td className="px-6 py-3 text-slate-800 font-medium whitespace-nowrap hidden md:table-cell">{t.account}</td>
+                      <td className="px-4 sm:px-6 py-3 text-slate-800 max-w-[120px] sm:max-w-xs truncate" title={t.description}>
+                        {t.description}
+                      </td>
+                      <td className="px-6 py-3 whitespace-nowrap hidden sm:table-cell">
+                        <span className="px-2 py-1 bg-slate-100 text-slate-600 rounded text-xs">
+                          {t.category}
                         </span>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-4 sm:px-6 py-3 text-right whitespace-nowrap">
-                    <div className="flex items-center justify-end space-x-2">
-                      <button 
-                        onClick={() => onEdit(t)}
-                        className="p-1 text-slate-400 hover:text-blue-600 transition-colors"
-                        title="Edit"
-                      >
-                        <Edit2 className="w-4 h-4" />
-                      </button>
-                      <button 
-                        onClick={() => onDelete(t.id)}
-                        className="p-1 text-slate-400 hover:text-red-600 transition-colors"
-                        title="Delete"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                      </td>
+                      <td className="px-4 sm:px-6 py-3 text-right whitespace-nowrap">
+                        <div className="flex flex-col items-end gap-0.5">
+                          <span className={`font-semibold ${t.type === 'Income' ? 'text-emerald-600' : 'text-slate-800'}`}>
+                            {t.type === 'Income' ? '+' : ''}{formatCurrency(t.amount)}
+                          </span>
+                          {t.balanceAfterTransaction !== undefined && (
+                            <span className="text-xs text-slate-400 font-medium">
+                              {privacyMode ? '••••••' : formatCurrency(t.balanceAfterTransaction)}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-4 sm:px-6 py-3 text-right whitespace-nowrap">
+                        <div className="flex items-center justify-end space-x-2">
+                          <button 
+                            onClick={() => onEdit(t)}
+                            className="p-1 text-slate-400 hover:text-blue-600 transition-colors"
+                            title="Edit"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                          <button 
+                            onClick={() => onDelete(t.id)}
+                            className="p-1 text-slate-400 hover:text-red-600 transition-colors"
+                            title="Delete"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  </React.Fragment>
+                );
+              })}
               {filteredTransactions.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center text-slate-400">
+                  <td colSpan={5} className="px-6 py-12 text-center text-slate-400">
                     No transactions found for this period.
                   </td>
                 </tr>
