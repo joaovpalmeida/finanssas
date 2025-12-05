@@ -196,12 +196,19 @@ export const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, 
     // Sum of all transactions linked to savings accounts in the current period
     const savingsFlow = filteredTransactions.reduce((sum, t) => {
       if (savingsAccountNames.has(t.account)) {
+        // We only care about positive flow into savings (e.g. transfers in or income)
+        // If we want net flow (in minus out), just sum t.amount.
+        // Usually savings rate is (Money Saved) / Income.
+        // Money Saved = Net Increase in Savings Account Balance.
         return sum + t.amount;
       }
       return sum;
     }, 0);
 
-    return (savingsFlow / periodSummary.totalIncome) * 100;
+    // If net flow is negative (withdrew from savings), rate is effectively 0 for this period context
+    const netSavings = Math.max(0, savingsFlow);
+
+    return (netSavings / periodSummary.totalIncome) * 100;
   }, [periodSummary, filteredTransactions, savingsAccountNames]);
 
   // Helper to get breakdown for the detailed view
@@ -348,7 +355,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, 
             colorClass="bg-purple-100"
             privacyMode={privacyMode}
             isPercentage
-            tooltip="Percentage of income transferred to or earned in Savings Accounts"
+            tooltip="Percentage of income added to Savings Accounts this period"
           />
         )}
         <StatCard 
@@ -551,7 +558,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, 
                   <React.Fragment key={t.id}>
                     {showHeader && (
                       <tr className="bg-slate-50/80 border-b border-slate-100">
-                        <td colSpan={5} className="px-4 sm:px-6 py-2 text-xs font-bold text-slate-50 uppercase tracking-wider">
+                        <td colSpan={5} className="px-4 sm:px-6 py-2 text-xs font-bold text-slate-500 uppercase tracking-wider">
                           {dateStr}
                         </td>
                       </tr>

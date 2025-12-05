@@ -3,6 +3,7 @@ import { Transaction, TransactionType } from '../types';
 
 export interface ColumnMapping {
   date: string; // stored as stringified index "0", "1"...
+  dateFormat?: string; // "DD/MM/YYYY", "MM/DD/YYYY", "YYYY-MM-DD"
   
   // Common or default fields
   description: string;
@@ -210,7 +211,36 @@ export const parseExcelFile = (
                    const dateObj = XLSX.SSF.parse_date_code(row[dateIndex]);
                    if (dateObj) return new Date(dateObj.y, dateObj.m - 1, dateObj.d).toISOString();
                 } else {
-                   const d = new Date(row[dateIndex]);
+                   const val = String(row[dateIndex]).trim();
+                   
+                   // Try specific format parsing if defined
+                   if (mapping?.dateFormat && mapping.dateFormat !== '') {
+                       // Match numbers in the string
+                       const parts = val.match(/(\d+)/g);
+                       if (parts && parts.length >= 3) {
+                           const nums = parts.map(Number);
+                           let y, m, d;
+                           
+                           if (mapping.dateFormat === 'DD/MM/YYYY') {
+                               [d, m, y] = nums;
+                           } else if (mapping.dateFormat === 'MM/DD/YYYY') {
+                               [m, d, y] = nums;
+                           } else if (mapping.dateFormat === 'YYYY-MM-DD') {
+                               [y, m, d] = nums;
+                           }
+                           
+                           if (y !== undefined && m !== undefined && d !== undefined) {
+                               // Handle 2 digit years (naive assumption: 2000+)
+                               if (y < 100) y += 2000; 
+                               
+                               const date = new Date(y, m - 1, d);
+                               if (!isNaN(date.getTime())) return date.toISOString();
+                           }
+                       }
+                   }
+
+                   // Fallback to standard parsing
+                   const d = new Date(val);
                    if (!isNaN(d.getTime())) return d.toISOString();
                 }
             }

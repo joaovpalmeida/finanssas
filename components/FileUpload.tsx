@@ -29,6 +29,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onUpload, isLoading, err
   
   const [mapping, setMapping] = useState<ColumnMapping>({
     date: '',
+    dateFormat: '',
     description: '',
     amount: '',
     income: '',
@@ -69,6 +70,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onUpload, isLoading, err
 
     const mapping = {
       date: findIndex(/date/i),
+      dateFormat: '',
       description: findIndex(/description|desc|name/i),
       amount: findIndex(/amount|value|cost/i),
       income: findIndex(/income|credit|deposit/i),
@@ -173,7 +175,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onUpload, isLoading, err
     setSheets([]);
     setParsedPreview([]);
     setMapping({ 
-      date: '', description: '', amount: '', income: '', expense: '', category: '', 
+      date: '', dateFormat: '', description: '', amount: '', income: '', expense: '', category: '', 
       manualDescription: '', manualCategory: '', manualIncomeCategory: '', manualExpenseCategory: '',
       startRow: 2, incomeStartRow: 2, expenseStartRow: 2 
     });
@@ -437,6 +439,22 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onUpload, isLoading, err
               <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100 pb-2">Common Fields</h4>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {renderColumnSelect("Date Column", mapping.date, v => setMapping({...mapping, date: v}))}
+                
+                {/* Date Format Selector */}
+                <div>
+                    <label className="block text-xs font-semibold text-slate-500 mb-1">Date Format (for text cells)</label>
+                    <select
+                        value={mapping.dateFormat || ''}
+                        onChange={(e) => setMapping({...mapping, dateFormat: e.target.value})}
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white text-base sm:text-sm"
+                    >
+                        <option value="">Auto (Best Guess)</option>
+                        <option value="DD/MM/YYYY">DD/MM/YYYY (Day First)</option>
+                        <option value="MM/DD/YYYY">MM/DD/YYYY (Month First)</option>
+                        <option value="YYYY-MM-DD">YYYY-MM-DD (ISO)</option>
+                    </select>
+                </div>
+
                 <div>
                     <label className="block text-xs font-semibold text-slate-500 mb-1">
                       Default Date (Fallback)
