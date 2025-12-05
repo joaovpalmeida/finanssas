@@ -5,10 +5,12 @@ import {
 } from 'recharts';
 import { 
   TrendingUp, TrendingDown, DollarSign, Activity, CreditCard, Wallet, Edit2, Trash2,
-  ChevronDown, ChevronUp, BarChart3, Layers, ArrowRight, Calendar, Filter, ChevronLeft, ChevronRight
+  ChevronDown, ChevronUp, BarChart3, Layers, ArrowRight, Calendar, Filter, ChevronLeft, ChevronRight,
+  Eye, EyeOff
 } from 'lucide-react';
 import { Transaction, FinancialSummary, Category, TransactionType } from '../types';
 import { formatCurrency, aggregateData, getMonthYearLabel } from '../utils/helpers';
+import { getPrivacySetting, savePrivacySetting } from '../services/db';
 
 interface DashboardProps {
   transactions: Transaction[];
@@ -25,12 +27,15 @@ const StatCard: React.FC<{
   title: string; 
   amount: number; 
   icon: React.ReactNode; 
-  colorClass: string 
-}> = ({ title, amount, icon, colorClass }) => (
+  colorClass: string;
+  privacyMode: boolean;
+}> = ({ title, amount, icon, colorClass, privacyMode }) => (
   <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 flex items-center justify-between">
     <div>
       <p className="text-sm font-medium text-slate-500 mb-1">{title}</p>
-      <h3 className="text-2xl font-bold text-slate-800">{formatCurrency(amount)}</h3>
+      <h3 className="text-2xl font-bold text-slate-800">
+        {privacyMode ? '••••••' : formatCurrency(amount)}
+      </h3>
     </div>
     <div className={`p-3 rounded-full ${colorClass} bg-opacity-10`}>
       {icon}
@@ -40,8 +45,9 @@ const StatCard: React.FC<{
 
 export const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, onEdit, onDelete, onNavigateToAdmin }) => {
   const [showCharts, setShowCharts] = useState(false);
+  const [privacyMode, setPrivacyMode] = useState(true); // Default to true (hidden)
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(25);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
   
   // Initialize filter with current month (YYYY-MM)
   const [dateFilter, setDateFilter] = useState<string>(() => {
@@ -49,7 +55,20 @@ export const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, 
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   });
 
-  // Reset to page 1 when filter or data changes
+  // Load privacy setting on mount
+  useEffect(() => {
+    const savedPrivacy = getPrivacySetting();
+    setPrivacyMode(savedPrivacy);
+  }, []);
+
+  // Handle privacy toggle and save
+  const togglePrivacy = async () => {
+    const newMode = !privacyMode;
+    setPrivacyMode(newMode);
+    await savePrivacySetting(newMode);
+  };
+
+  //HB Reset to page 1 when filter or data changes
   useEffect(() => {
     setCurrentPage(1);
   }, [dateFilter, transactions, itemsPerPage]);
@@ -149,6 +168,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, 
          </div>
          
          <div className="flex items-center space-x-3">
+            <button 
+              onClick={togglePrivacy}
+              className="p-2 text-slate-600 hover:text-blue-600 transition-colors bg-white border border-slate-200 rounded-lg shadow-sm"
+              title={privacyMode ? "Show Values" : "Hide Values"}
+            >
+              {privacyMode ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+            </button>
+
             <div className="relative">
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                 <Calendar className="h-4 w-4 text-slate-400" />
@@ -184,19 +211,22 @@ export const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, 
           title="Income" 
           amount={periodSummary.totalIncome} 
           icon={<TrendingUp className="w-6 h-6 text-emerald-600" />} 
-          colorClass="bg-emerald-100" 
+          colorClass="bg-emerald-100"
+          privacyMode={privacyMode}
         />
         <StatCard 
           title="Expenses" 
           amount={periodSummary.totalExpense} 
           icon={<TrendingDown className="w-6 h-6 text-red-600" />} 
-          colorClass="bg-red-100" 
+          colorClass="bg-red-100"
+          privacyMode={privacyMode}
         />
         <StatCard 
-          title="Net Balance" 
+          title="Balance" 
           amount={periodSummary.netSavings} 
           icon={<DollarSign className="w-6 h-6 text-blue-600" />} 
-          colorClass="bg-blue-100" 
+          colorClass="bg-blue-100"
+          privacyMode={privacyMode}
         />
       </div>
 
@@ -208,7 +238,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, 
             Current Account Balances
           </div>
           <span className="text-xs font-normal text-slate-400 bg-slate-50 px-2 py-1 rounded">
-             Total Net Worth: {formatCurrency(overallSummary.accountBalances.reduce((acc, curr) => acc + curr.balance, 0))}
+             Total Net Worth: {privacyMode ? '••••••' : formatCurrency(overallSummary.accountBalances.reduce((acc, curr) => acc + curr.balance, 0))}
           </span>
         </h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -223,7 +253,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, 
                     {acc.account}
                   </p>
                   <p className={`font-bold ${acc.balance >= 0 ? 'text-slate-800' : 'text-red-600'}`}>
-                    {formatCurrency(acc.balance)}
+                    {privacyMode ? '••••••' : formatCurrency(acc.balance)}
                   </p>
                 </div>
               </div>
@@ -252,7 +282,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, 
                         <XAxis dataKey="month" axisLine={false} tickLine={false} />
                         <YAxis axisLine={false} tickLine={false} tickFormatter={(val) => `€${val}`} />
                         <Tooltip 
-                          formatter={(value) => formatCurrency(value as number)}
+                          formatter={(value) => privacyMode ? '••••••' : formatCurrency(value as number)}
                           contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
                         />
                         <Bar dataKey="income" fill="#10b981" radius={[4, 4, 0, 0]} name="Income" />
@@ -285,7 +315,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, 
                               <Cell key={`cell-${index}`} fill={GROUP_COLORS[index % GROUP_COLORS.length]} />
                             ))}
                           </Pie>
-                          <Tooltip formatter={(value) => formatCurrency(value as number)} />
+                          <Tooltip formatter={(value) => privacyMode ? '••••••' : formatCurrency(value as number)} />
                           <Legend verticalAlign="bottom" height={36}/>
                         </PieChart>
                       </ResponsiveContainer>
@@ -306,7 +336,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, 
                    <div key={groupName} className="space-y-4">
                       <div className="flex items-center justify-between border-b border-slate-100 pb-2">
                          <h4 className="font-bold text-slate-700">{groupName} Expenses</h4>
-                         <span className="text-sm font-semibold text-slate-900">{formatCurrency(data.total)}</span>
+                         <span className="text-sm font-semibold text-slate-900">
+                           {privacyMode ? '••••••' : formatCurrency(data.total)}
+                         </span>
                       </div>
                       <div className="space-y-3">
                          {Object.entries(data.categories)
@@ -315,7 +347,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, 
                               <div key={catName} className="relative">
                                 <div className="flex justify-between text-sm z-10 relative mb-1">
                                    <span className="text-slate-600">{catName}</span>
-                                   <span className="font-medium text-slate-700">{formatCurrency(amount as number)}</span>
+                                   <span className="font-medium text-slate-700">
+                                     {privacyMode ? '••••••' : formatCurrency(amount as number)}
+                                   </span>
                                 </div>
                                 <div className="w-full bg-slate-50 rounded-full h-1.5 overflow-hidden">
                                    <div 

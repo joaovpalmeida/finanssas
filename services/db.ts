@@ -59,7 +59,8 @@ const initSchema = () => {
 
     CREATE TABLE IF NOT EXISTS accounts (
       id TEXT PRIMARY KEY,
-      name TEXT UNIQUE
+      name TEXT UNIQUE,
+      is_savings INTEGER DEFAULT 0
     );
 
     CREATE TABLE IF NOT EXISTS categories (
@@ -110,7 +111,8 @@ const migrateSchema = () => {
     db.run(`
       CREATE TABLE IF NOT EXISTS accounts (
         id TEXT PRIMARY KEY,
-        name TEXT UNIQUE
+        name TEXT UNIQUE,
+        is_savings INTEGER DEFAULT 0
       );
       CREATE TABLE IF NOT EXISTS categories (
         id TEXT PRIMARY KEY,
@@ -119,6 +121,16 @@ const migrateSchema = () => {
         group_name TEXT
       );
     `);
+
+    // 3b. Migration: Check for 'is_savings' column in accounts (for existing dbs)
+    const accRes = db.exec("PRAGMA table_info(accounts);");
+    if (accRes.length > 0) {
+      const columns = accRes[0].values.map((row: any[]) => row[1]);
+      if (!columns.includes('is_savings')) {
+        console.log("Migrating database: Adding 'is_savings' column to accounts");
+        db.run("ALTER TABLE accounts ADD COLUMN is_savings INTEGER DEFAULT 0");
+      }
+    }
 
     // 4. Create configs table if it doesn't exist
     db.run(`
@@ -133,7 +145,7 @@ const migrateSchema = () => {
     if (accountsCount === 0) {
       const distinctAccounts = db.exec("SELECT DISTINCT account FROM transactions");
       if (distinctAccounts.length > 0) {
-        const stmt = db.prepare("INSERT INTO accounts (id, name) VALUES (?, ?)");
+        const stmt = db.prepare("INSERT INTO accounts (id, name, is_savings) VALUES (?, ?, 0)");
         distinctAccounts[0].values.forEach((row: any[]) => {
           if (row[0]) stmt.run([`acc-${Date.now()}-${Math.random()}`, row[0]]);
         });
@@ -349,6 +361,10 @@ export const generateDummyData = async () => {
   categories.forEach(c => {
     db.run("UPDATE categories SET group_name = ?, type = ? WHERE name = ?", [c.group, c.type, c.name]);
   });
+  
+  // Update Accounts to set Savings
+  db.run("UPDATE accounts SET is_savings = 1 WHERE name = 'Savings'");
+  
   db.run("COMMIT");
   await saveDB();
 };
@@ -362,7 +378,7 @@ export const insertTransactions = async (transactions: Transaction[]) => {
   
   const stmtTxn = db.prepare("INSERT OR REPLACE INTO transactions VALUES (?, ?, ?, ?, ?, ?, ?)");
   const stmtCat = db.prepare("INSERT OR IGNORE INTO categories (id, name, type, group_name) VALUES (?, ?, ?, ?)");
-  const stmtAcc = db.prepare("INSERT OR IGNORE INTO accounts (id, name) VALUES (?, ?)");
+  const stmtAcc = db.prepare("INSERT OR IGNORE INTO accounts (id, name, is_savings) VALUES (?, ?, 0)");
 
   for (const t of transactions) {
     // 1. Insert Transaction
@@ -487,8 +503,22 @@ export const getAccounts = (): Account[] => {
   try {
     const res = db.exec("SELECT * FROM accounts ORDER BY name");
     if (res.length === 0) return [];
-    return res[0].values.map((row: any[]) => ({ id: row[0], name: row[1] }));
+    return res[0].values.map((row: any[]) => ({ 
+      id: row[0], 
+      name: row[1],
+      isSavings: row[2] === 1 // Convert 0/1 to boolean
+    }));
   } catch (e) { return []; }
+};
+
+export const createAccount = async (name: string, isSavings: boolean) => {
+  if (!db) return;
+  db.run("INSERT INTO accounts (id, name, is_savings) VALUES (?, ?, ?)", [
+    `acc-${Date.now()}`,
+    name,
+    isSavings ? 1 : 0
+  ]);
+  await saveDB();
 };
 
 export const getCategories = (): Category[] => {
@@ -518,11 +548,11 @@ export const updateCategory = async (oldName: string, newName: string, type: str
   await saveDB();
 };
 
-export const updateAccount = async (oldName: string, newName: string) => {
+export const updateAccount = async (oldName: string, newName: string, isSavings: boolean) => {
   if (!db) return;
   db.run("BEGIN TRANSACTION");
   // Update definition
-  db.run("UPDATE accounts SET name = ? WHERE name = ?", [newName, oldName]);
+  db.run("UPDATE accounts SET name = ?, is_savings = ? WHERE name = ?", [newName, isSavings ? 1 : 0, oldName]);
   // Update usage in transactions
   if (oldName !== newName) {
     db.run("UPDATE transactions SET account = ? WHERE account = ?", [newName, oldName]);
@@ -582,10 +612,10 @@ export const renameCategory = async (oldName: string, newName: string) => {
 }
 
 export const renameAccount = async (oldName: string, newName: string) => {
-  await updateAccount(oldName, newName);
+  await updateAccount(oldName, newName, false);
 }
 
-// --- Configs (API Keys) ---
+// --- Configs (API Keys & Settings) ---
 
 export const getApiKey = (): string | null => {
   if (!db) return null;
@@ -603,6 +633,25 @@ export const getApiKey = (): string | null => {
 export const saveApiKey = async (key: string) => {
   if (!db) return;
   db.run("INSERT OR REPLACE INTO configs (key, value) VALUES ('google_api_key', ?)", [key]);
+  await saveDB();
+}
+
+export const getPrivacySetting = (): boolean => {
+  if (!db) return true; // Default to true (hidden) if not set or db error
+  try {
+    const res = db.exec("SELECT value FROM configs WHERE key = 'privacy_mode'");
+    if (res.length > 0) {
+        return res[0].values[0][0] === 'true';
+    }
+    return true; // Default to true (hidden) if key not found
+  } catch(e) {
+    return true;
+  }
+}
+
+export const savePrivacySetting = async (isEnabled: boolean) => {
+  if (!db) return;
+  db.run("INSERT OR REPLACE INTO configs (key, value) VALUES ('privacy_mode', ?)", [String(isEnabled)]);
   await saveDB();
 }
 

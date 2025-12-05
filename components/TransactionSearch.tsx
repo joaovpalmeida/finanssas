@@ -17,7 +17,7 @@ export const TransactionSearch: React.FC<TransactionSearchProps> = ({ categories
   
   // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(25);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
   
   const [filters, setFilters] = useState<SearchFilters>({
     keyword: '',

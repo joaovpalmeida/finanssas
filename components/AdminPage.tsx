@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Download, Trash2, Settings, Tag, CreditCard, Edit2, Save, X, UploadCloud, AlertTriangle, Upload, Wand2, Key } from 'lucide-react';
+import { Download, Trash2, Settings, Tag, CreditCard, Edit2, Save, X, UploadCloud, AlertTriangle, Upload, Wand2, Key, PiggyBank, Plus } from 'lucide-react';
 import { SqlConsole } from './SqlConsole';
 import { FileUpload } from './FileUpload';
-import { getAccounts, getCategories, updateAccount, updateCategory, deleteCategory, deleteAccount, getTransactionCount, generateDummyData, getApiKey, saveApiKey } from '../services/db';
+import { getAccounts, getCategories, updateAccount, updateCategory, deleteCategory, deleteAccount, getTransactionCount, generateDummyData, getApiKey, saveApiKey, createAccount } from '../services/db';
 import { Account, Category, Transaction } from '../types';
 
 interface AdminPageProps {
@@ -91,6 +91,16 @@ export const AdminPage: React.FC<AdminPageProps> = ({
     }
   };
 
+  const handleCreateAccount = async (name: string, isSavings: boolean) => {
+    if (!name.trim()) return;
+    try {
+        await createAccount(name.trim(), isSavings);
+        refreshData();
+    } catch (e: any) {
+        alert("Failed to create account: " + e.message);
+    }
+  };
+
   return (
     <div className="space-y-8 animate-fade-in">
       
@@ -173,9 +183,9 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                 </div>
            </div>
 
-          {/* Generate Dummy Data */}
+          {/*jw Generate Dummy Data */}
           {dbCount === 0 && (
-             <div className="p-5 border border-indigo-200 rounded-xl bg-indigo-50/50 hover:border-indigo-300 transition-all flex flex-col h-full">
+             <div className="p-5 border border-indigo-200 rounded-xl bg-indigo-50/50 hover:border-indigo-300 transition-allyb flex flex-col h-full">
                 <h3 className="font-semibold text-indigo-800 flex items-center mb-2">
                   <Wand2 className="w-4 h-4 mr-2 text-indigo-600" />
                   Demo Mode
@@ -210,7 +220,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
             </button>
           </div>
 
-          {/* Restore */}
+          {/*Km Restore */}
           <div className="p-5 border border-slate-200 rounded-xl bg-slate-50/50 hover:border-emerald-300 transition-all flex flex-col h-full">
             <h3 className="font-semibold text-slate-800 flex items-center mb-2">
               <Upload className="w-4 h-4 mr-2 text-emerald-600" />
@@ -257,13 +267,17 @@ export const AdminPage: React.FC<AdminPageProps> = ({
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Account Config */}
         <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 flex flex-col">
-          <div className="flex items-center space-x-2 mb-4">
-            <CreditCard className="w-5 h-5 text-blue-500" />
-            <h3 className="font-bold text-slate-800">Accounts</h3>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center space-x-2">
+              <CreditCard className="w-5 h-5 text-blue-500" />
+              <h3 className="font-bold text-slate-800">Accounts</h3>
+            </div>
           </div>
+          
           <AccountList 
             accounts={accounts} 
-            onUpdate={async (old, neo) => { await updateAccount(old, neo); refreshData(); }}
+            onCreate={handleCreateAccount}
+            onUpdate={async (old, neo, isSavings) => { await updateAccount(old, neo, isSavings); refreshData(); }}
             onDelete={async (id) => { 
                try {
                    await deleteAccount(id); 
@@ -306,56 +320,113 @@ export const AdminPage: React.FC<AdminPageProps> = ({
 
 const AccountList: React.FC<{ 
     accounts: Account[], 
-    onUpdate: (old: string, neo: string) => Promise<void>,
+    onCreate: (name: string, isSavings: boolean) => Promise<void>,
+    onUpdate: (old: string, neo: string, isSavings: boolean) => Promise<void>,
     onDelete: (id: string) => Promise<void>
-}> = ({ accounts, onUpdate, onDelete }) => {
+}> = ({ accounts, onCreate, onUpdate, onDelete }) => {
   const [editingItem, setEditingItem] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
+  const [editIsSavings, setEditIsSavings] = useState(false);
+  
+  // New account state
+  const [newAccName, setNewAccName] = useState('');
+  const [newAccIsSavings, setNewAccIsSavings] = useState(false);
 
-  const handleStartEdit = (name: string) => {
-    setEditingItem(name);
-    setEditValue(name);
+  const handleStartEdit = (acc: Account) => {
+    setEditingItem(acc.name);
+    setEditValue(acc.name);
+    setEditIsSavings(acc.isSavings);
   };
 
   const handleSave = async () => {
-    if (editingItem && editValue && editValue !== editingItem) {
-      await onUpdate(editingItem, editValue);
+    if (editingItem && editValue && editValue.trim() !== '') {
+      await onUpdate(editingItem, editValue, editIsSavings);
     }
     setEditingItem(null);
   };
 
+  const handleCreate = async () => {
+    if (newAccName.trim() !== '') {
+        await onCreate(newAccName, newAccIsSavings);
+        setNewAccName('');
+        setNewAccIsSavings(false);
+    }
+  };
+
   return (
-     <div className="flex-1 border border-slate-100 rounded-lg overflow-hidden bg-slate-50 max-h-96 overflow-y-auto">
-        <ul className="divide-y divide-slate-100">
-          {accounts.map((acc) => (
-            <li key={acc.id} className="bg-white px-4 py-3 flex items-center justify-between hover:bg-slate-50 group">
-               {editingItem === acc.name ? (
-                  <div className="flex items-center w-full space-x-2">
-                    <input 
-                      className="flex-1 px-2 py-1 border rounded text-base sm:text-sm bg-white text-slate-800"
-                      value={editValue}
-                      onChange={e => setEditValue(e.target.value)}
-                    />
-                    <button onClick={handleSave} className="text-emerald-600"><Save className="w-4 h-4" /></button>
-                    <button onClick={() => setEditingItem(null)} className="text-slate-400"><X className="w-4 h-4" /></button>
-                  </div>
-               ) : (
-                 <>
-                   <span className="text-sm font-medium text-slate-700">{acc.name}</span>
-                   <div className="flex items-center space-x-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                       <button onClick={() => handleStartEdit(acc.name)} className="text-slate-400 hover:text-blue-600" title="Rename">
-                           <Edit2 className="w-3.5 h-3.5" />
-                       </button>
-                       <button onClick={() => onDelete(acc.id)} className="text-slate-400 hover:text-red-600" title="Delete">
-                           <Trash2 className="w-3.5 h-3.5" />
-                       </button>
-                   </div>
-                 </>
-               )}
-            </li>
-          ))}
-          {accounts.length === 0 && <li className="p-4 text-center text-slate-400 text-sm">No accounts found</li>}
-        </ul>
+     <div className="flex-1 flex flex-col min-h-0">
+        {/* Create Form */}
+        <div className="mb-4 bg-slate-50 p-3 rounded-lg border border-slate-100">
+           <div className="flex items-center space-x-2">
+             <input 
+                className="flex-1 px-3 py-2 border rounded-lg text-sm bg-white text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                value={newAccName}
+                onChange={e => setNewAccName(e.target.value)}
+                placeholder="Create new account..."
+             />
+             <button
+                onClick={() => setNewAccIsSavings(!newAccIsSavings)}
+                className={`p-2 rounded-lg transition-colors border ${newAccIsSavings ? 'bg-indigo-100 border-indigo-200 text-indigo-700' : 'bg-white border-slate-200 text-slate-400 hover:text-slate-600'}`}
+                title={newAccIsSavings ? "Is Savings Account" : "Not Savings Account"}
+             >
+                <PiggyBank className="w-5 h-5" />
+             </button>
+             <button 
+                onClick={handleCreate}
+                disabled={!newAccName.trim()}
+                className="p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+             >
+                <Plus className="w-5 h-5" />
+             </button>
+           </div>
+        </div>
+
+        {/* List */}
+        <div className="flex-1 border border-slate-100 rounded-lg overflow-hidden bg-slate-50 max-h-96 overflow-y-auto">
+            <ul className="divide-y divide-slate-100">
+            {accounts.map((acc) => (
+                <li key={acc.id} className="bg-white px-4 py-3 flex items-center justify-between hover:bg-slate-50 group">
+                {editingItem === acc.name ? (
+                    <div className="flex items-center w-full space-x-2">
+                        <input 
+                            className="flex-1 px-2 py-1 border rounded text-base sm:text-sm bg-white text-slate-800"
+                            value={editValue}
+                            onChange={e => setEditValue(e.target.value)}
+                        />
+                         <button
+                            onClick={() => setEditIsSavings(!editIsSavings)}
+                            className={`p-1 rounded transition-colors ${editIsSavings ? 'text-indigo-600 bg-indigo-50' : 'text-slate-400 bg-slate-100'}`}
+                         >
+                            <PiggyBank className="w-4 h-4" />
+                         </button>
+                        <button onClick={handleSave} className="text-emerald-600"><Save className="w-4 h-4" /></button>
+                        <button onClick={() => setEditingItem(null)} className="text-slate-400"><X className="w-4 h-4" /></button>
+                    </div>
+                ) : (
+                    <>
+                    <div className="flex items-center space-x-2">
+                        {acc.isSavings ? (
+                            <PiggyBank className="w-4 h-4 text-indigo-500" />
+                        ) : (
+                            <CreditCard className="w-4 h-4 text-slate-400" />
+                        )}
+                        <span className="text-sm font-medium text-slate-700">{acc.name}</span>
+                    </div>
+                    <div className="flex items-center space-x-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button onClick={() => handleStartEdit(acc)} className="text-slate-400 hover:text-blue-600" title="Rename">
+                            <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                        <button onClick={() => onDelete(acc.id)} className="text-slate-400 hover:text-red-600" title="Delete">
+                            <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                    </div>
+                    </>
+                )}
+                </li>
+            ))}
+            {accounts.length === 0 && <li className="p-4 text-center text-slate-400 text-sm">No accounts found</li>}
+            </ul>
+        </div>
      </div>
   )
 }

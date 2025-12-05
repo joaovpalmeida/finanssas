@@ -17,6 +17,7 @@ export interface Category {
 export interface Account {
   id: string;
   name: string;
+  isSavings: boolean;
 }
 
 export interface Transaction {
