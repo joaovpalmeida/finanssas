@@ -4,7 +4,7 @@ import {
   PieChart, Pie, Cell, Legend
 } from 'recharts';
 import { 
-  TrendingUp, TrendingDown, DollarSign, Activity, CreditCard, Wallet, Edit2, Trash2,
+  TrendingUp, TrendingDown, DollarSign, CreditCard, Wallet, Edit2, Trash2,
   ChevronDown, ChevronUp, BarChart3, Layers, ArrowRight, Calendar, Filter, ChevronLeft, ChevronRight,
   Eye, EyeOff, Info, PiggyBank, PieChart as PieIcon, Percent
 } from 'lucide-react';
@@ -63,6 +63,25 @@ const StatCard: React.FC<{
   </div>
 );
 
+// Helper to get date range from filter key
+const getDateRange = (filter: string): { start: Date | null, end: Date, label: string } => {
+  const now = new Date();
+  
+  if (filter === 'all') {
+    return { start: null, end: now, label: 'All Time' };
+  }
+  
+  // Specific Month YYYY-MM
+  const [year, month] = filter.split('-').map(Number);
+  if (!isNaN(year) && !isNaN(month)) {
+    const start = new Date(year, month - 1, 1);
+    const end = new Date(year, month, 0, 23, 59, 59, 999);
+    return { start, end, label: start.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) };
+  }
+
+  return { start: null, end: now, label: 'All Time' };
+};
+
 export const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, accounts = [], onEdit, onDelete, onNavigateToAdmin }) => {
   const [showCharts, setShowCharts] = useState(false);
   const [privacyMode, setPrivacyMode] = useState(true); // Default to true (hidden)
@@ -70,11 +89,26 @@ export const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, 
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [allocationView, setAllocationView] = useState<'group' | 'category'>('group');
   
-  // Initialize filter with current month (YYYY-MM)
-  const [dateFilter, setDateFilter] = useState<string>(() => {
-    const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-  });
+  // 2. Extract unique months for the dropdown history
+  const availableMonths = useMemo(() => {
+    const dates = new Set(transactions.map(t => {
+      const d = new Date(t.date);
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    }));
+    const list = Array.from(dates).sort().reverse(); // Newest first
+    
+    // Ensure current month is always in the list
+    const currentMonthKey = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
+    if (!list.includes(currentMonthKey)) {
+        list.unshift(currentMonthKey);
+    }
+    return list;
+  }, [transactions]);
+
+  // Default filter to current month
+  const [dateFilter, setDateFilter] = useState<string>(
+      `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`
+  );
 
   // Load privacy setting on mount
   useEffect(() => {
@@ -89,37 +123,38 @@ export const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, 
     await savePrivacySetting(newMode);
   };
 
-  //HB Reset to page 1 when filter or data changes
+  // Reset to page 1 when filter or data changes
   useEffect(() => {
     setCurrentPage(1);
   }, [dateFilter, transactions, itemsPerPage]);
 
-  // 1. Extract unique months for the filter dropdown
-  const availableMonths = useMemo(() => {
-    const dates = new Set(transactions.map(t => {
-      const d = new Date(t.date);
-      // Format as YYYY-MM
-      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-    }));
-    
-    // Always include current month option so it's selectable even if empty
-    const now = new Date();
-    const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-    dates.add(currentMonth);
+  // 1. Calculate Date Range based on filter
+  const { start: dateStart, end: dateEnd, label: dateLabel } = useMemo(() => getDateRange(dateFilter), [dateFilter]);
 
-    // Include currently selected month if it's not 'all' (handles viewing empty past months if selected)
-    if (dateFilter !== 'all') {
-      dates.add(dateFilter);
-    }
+  // Determine if the view is "Current"
+  const isCurrentView = useMemo(() => {
+    // It's current if filter is 'all' or the current month key
+    const currentMonthKey = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
+    return dateFilter === 'all' || dateFilter === currentMonthKey;
+  }, [dateFilter]);
 
-    return Array.from(dates).sort().reverse(); // Newest first
-  }, [transactions, dateFilter]);
-
-  // 2. Filter transactions based on selection
+  // 3. Filter transactions based on selection (For Flow: Income/Expense charts)
   const filteredTransactions = useMemo(() => {
-    if (dateFilter === 'all') return transactions;
-    return transactions.filter(t => t.date.startsWith(dateFilter));
-  }, [transactions, dateFilter]);
+    return transactions.filter(t => {
+      const d = new Date(t.date);
+      // Start is inclusive (if set), End is inclusive
+      return (!dateStart || d >= dateStart) && d <= dateEnd;
+    });
+  }, [transactions, dateStart, dateEnd]);
+
+  // 4. Filter for Balances (Cumulative Stock)
+  // Balances include everything UP TO the end date.
+  const cumulativeTransactions = useMemo(() => {
+    return transactions.filter(t => {
+      const d = new Date(t.date);
+      return d <= dateEnd;
+    });
+  }, [transactions, dateEnd]);
 
   // Pagination Logic
   const totalPages = Math.ceil(filteredTransactions.length / itemsPerPage);
@@ -128,11 +163,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, 
     return filteredTransactions.slice(start, start + itemsPerPage);
   }, [filteredTransactions, currentPage, itemsPerPage]);
 
-  // 3. Compute Aggregates
-  // 'overallSummary' is used for Account Balances (current state)
-  const overallSummary: FinancialSummary = useMemo(() => aggregateData(transactions, categories), [transactions, categories]);
-  
-  // 'periodSummary' is used for Stats, Charts and Transaction List (filtered view)
+  // 5. Compute Aggregates
+  const balanceSummary: FinancialSummary = useMemo(() => aggregateData(cumulativeTransactions, categories), [cumulativeTransactions, categories]);
   const periodSummary: FinancialSummary = useMemo(() => aggregateData(filteredTransactions, categories), [filteredTransactions, categories]);
 
   // Identify savings accounts
@@ -140,21 +172,20 @@ export const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, 
     return new Set(accounts.filter(a => a.isSavings).map(a => a.name));
   }, [accounts]);
 
-  // Calculate "Active Balance" (Total - Savings) for the Balance Card
+  // Calculate "Active Balance" (Total - Savings) using balanceSummary
   const activeBalance = useMemo(() => {
-    return overallSummary.accountBalances.reduce((sum, item) => {
-      // If account is NOT a savings account, include it in the main balance
+    return balanceSummary.accountBalances.reduce((sum, item) => {
       if (!savingsAccountNames.has(item.account)) {
         return sum + item.balance;
       }
       return sum;
     }, 0);
-  }, [overallSummary, savingsAccountNames]);
+  }, [balanceSummary, savingsAccountNames]);
 
-  // Total Net Worth (Includes Savings)
+  // Total Net Worth (Includes Savings) using balanceSummary
   const totalNetWorth = useMemo(() => {
-    return overallSummary.accountBalances.reduce((acc, curr) => acc + curr.balance, 0);
-  }, [overallSummary]);
+    return balanceSummary.accountBalances.reduce((acc, curr) => acc + curr.balance, 0);
+  }, [balanceSummary]);
 
   // Calculate Savings Rate
   const savingsRate = useMemo(() => {
@@ -166,7 +197,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, 
   const detailedBreakdown = useMemo(() => {
     const groups: Record<string, { total: number, categories: Record<string, number> }> = {};
     
-    // Use filtered transactions for the breakdown
     filteredTransactions.filter(t => t.type === TransactionType.EXPENSE).forEach(t => {
        const catDef = categories.find(c => c.name === t.category);
        const groupName = catDef?.group || 'General';
@@ -183,26 +213,19 @@ export const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, 
     return Object.entries(groups).sort((a, b) => b[1].total - a[1].total);
   }, [filteredTransactions, categories]);
 
-  // Calculate Structure Data (Group View) including Savings
+  // Calculate Structure Data
   const structureData = useMemo(() => {
-    // Start with expenses by group
     const data = [...periodSummary.expenseByGroup];
-    // Calculate net savings (Income - Expenses)
     const savings = periodSummary.totalIncome - periodSummary.totalExpense;
-    
-    // If we have positive savings, add it to the pie chart data
     if (savings > 0) {
       data.push({ name: 'Savings', value: savings });
     }
     return data;
   }, [periodSummary]);
 
-  // Calculate Category Allocation Data (Top Categories + Others + Savings)
+  // Calculate Category Allocation Data
   const categoryAllocationData = useMemo(() => {
-    // 1. Get Top Categories (Limit to top 5)
     const data = periodSummary.topCategories.map(c => ({ name: c.name, value: c.value }));
-    
-    // 2. Calculate "Others"
     const topSum = data.reduce((sum, item) => sum + item.value, 0);
     const otherSum = periodSummary.totalExpense - topSum;
     
@@ -210,7 +233,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, 
       data.push({ name: 'Others', value: otherSum });
     }
 
-    // 3. Add Savings
     const savings = periodSummary.totalIncome - periodSummary.totalExpense;
     if (savings > 0) {
       data.push({ name: 'Savings', value: savings });
@@ -249,7 +271,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, 
          <div>
             <h2 className="text-2xl font-bold text-slate-800">Dashboard</h2>
             <p className="text-sm text-slate-500">
-              Overview for <span className="font-semibold text-slate-700">{getMonthYearLabel(dateFilter)}</span>
+              Overview for <span className="font-semibold text-slate-700">{dateLabel}</span>
             </p>
          </div>
          
@@ -277,7 +299,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, 
               <select
                 value={dateFilter}
                 onChange={(e) => setDateFilter(e.target.value)}
-                className="pl-9 pr-8 py-2 border border-slate-200 rounded-lg text-base sm:text-sm font-medium bg-white focus:ring-2 focus:ring-blue-500 appearance-none shadow-sm text-slate-700"
+                className="pl-9 pr-8 py-2 border border-slate-200 rounded-lg text-base sm:text-sm font-medium bg-white focus:ring-2 focus:ring-blue-500 appearance-none shadow-sm text-slate-700 max-w-[200px]"
               >
                 <option value="all">All Time</option>
                 {availableMonths.map(month => (
@@ -291,7 +313,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, 
          </div>
       </div>
 
-      {/* Stats Row (Filtered Data) */}
+      {/* Stats Row */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6">
         <StatCard 
           title="Income" 
@@ -321,23 +343,23 @@ export const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, 
           icon={<Wallet className="w-6 h-6 text-blue-600" />} 
           colorClass="bg-blue-100"
           privacyMode={privacyMode}
-          tooltip="Includes only checking and regular accounts (Savings excluded)"
+          tooltip={`Includes only checking and regular accounts (Savings excluded)${!isCurrentView ? ' at end of selected period' : ''}`}
         />
       </div>
 
-      {/* Accounts Overview (All Time Data - Always shows current balance) */}
+      {/* Accounts Overview */}
       <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
         <h3 className="text-lg font-semibold text-slate-800 mb-4 flex items-center justify-between">
           <div className="flex items-center">
             <Wallet className="w-5 h-5 mr-2 text-slate-600" />
-            Current Account Balances
+            {isCurrentView ? 'Current Account Balances' : 'Account Balances (End of Period)'}
           </div>
           <span className="text-xs font-normal text-slate-400 bg-slate-50 px-2 py-1 rounded">
              Total Net Worth: {privacyMode ? '••••••' : formatCurrency(totalNetWorth)}
           </span>
         </h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {overallSummary.accountBalances.map((acc, idx) => (
+          {balanceSummary.accountBalances.map((acc, idx) => (
             <div key={idx} className="p-4 rounded-lg border border-slate-100 bg-slate-50 flex items-center justify-between">
               <div className="flex items-center space-x-3">
                 <div className={`p-2 bg-white rounded-md shadow-sm ${savingsAccountNames.has(acc.account) ? 'text-indigo-500' : 'text-blue-500'}`}>
@@ -358,39 +380,19 @@ export const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, 
               </div>
             </div>
           ))}
+          {balanceSummary.accountBalances.length === 0 && (
+             <div className="col-span-full text-center text-slate-400 text-sm py-4">
+               No active accounts found for this period.
+             </div>
+          )}
         </div>
       </div>
 
-      {/* Charts Section (Filtered Data) */}
+      {/* Charts Section */}
       <div>
         {showCharts && (
           <div className="space-y-6 animate-fade-in">
-             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Monthly Trend */}
-                <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
-                  <div className="flex items-center justify-between mb-6">
-                    <h3 className="text-lg font-semibold text-slate-800 flex items-center">
-                      <Activity className="w-5 h-5 mr-2 text-blue-500" />
-                      Cash Flow Trend
-                    </h3>
-                  </div>
-                  <div className="h-72">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={periodSummary.monthlyData}>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                        <XAxis dataKey="month" axisLine={false} tickLine={false} />
-                        <YAxis axisLine={false} tickLine={false} tickFormatter={(val) => `€${val}`} />
-                        <Tooltip 
-                          formatter={(value) => privacyMode ? '••••••' : formatCurrency(value as number)}
-                          contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                        />
-                        <Bar dataKey="income" fill="#10b981" radius={[4, 4, 0, 0]} name="Income" />
-                        <Bar dataKey="expense" fill="#ef4444" radius={[4, 4, 0, 0]} name="Expense" />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-
+             <div className="grid grid-cols-1 gap-6">
                 {/* Expense Structure / Cash Flow Allocation */}
                 <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
                   <div className="flex items-center justify-between mb-6">
@@ -535,7 +537,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, 
                   <React.Fragment key={t.id}>
                     {showHeader && (
                       <tr className="bg-slate-50/80 border-b border-slate-100">
-                        <td colSpan={5} className="px-4 sm:px-6 py-2 text-xs font-bold text-slate-500 uppercase tracking-wider">
+                        <td colSpan={5} className="px-4 sm:px-6 py-2 text-xs font-bold text-slate-50 uppercase tracking-wider">
                           {dateStr}
                         </td>
                       </tr>
