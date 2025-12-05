@@ -172,6 +172,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, 
     return new Set(accounts.filter(a => a.isSavings).map(a => a.name));
   }, [accounts]);
 
+  const hasSavingsAccounts = savingsAccountNames.size > 0;
+
   // Calculate "Active Balance" (Total - Savings) using balanceSummary
   const activeBalance = useMemo(() => {
     return balanceSummary.accountBalances.reduce((sum, item) => {
@@ -314,7 +316,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, 
       </div>
 
       {/* Stats Row */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6">
+      <div className={`grid grid-cols-1 sm:grid-cols-2 ${hasSavingsAccounts ? 'md:grid-cols-4' : 'md:grid-cols-3'} gap-6`}>
         <StatCard 
           title="Income" 
           amount={periodSummary.totalIncome} 
@@ -329,14 +331,16 @@ export const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, 
           colorClass="bg-red-100"
           privacyMode={privacyMode}
         />
-        <StatCard 
-          title="Savings Rate" 
-          amount={savingsRate} 
-          icon={<Percent className="w-6 h-6 text-purple-600" />} 
-          colorClass="bg-purple-100"
-          privacyMode={privacyMode}
-          isPercentage
-        />
+        {hasSavingsAccounts && (
+          <StatCard 
+            title="Savings Rate" 
+            amount={savingsRate} 
+            icon={<Percent className="w-6 h-6 text-purple-600" />} 
+            colorClass="bg-purple-100"
+            privacyMode={privacyMode}
+            isPercentage
+          />
+        )}
         <StatCard 
           title="Available Balance" 
           amount={activeBalance} 
