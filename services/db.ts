@@ -65,9 +65,10 @@ const initSchema = () => {
 
     CREATE TABLE IF NOT EXISTS categories (
       id TEXT PRIMARY KEY,
-      name TEXT UNIQUE,
+      name TEXT,
       type TEXT,
-      group_name TEXT
+      group_name TEXT,
+      UNIQUE(name, type)
     );
 
     CREATE TABLE IF NOT EXISTS configs (
@@ -108,19 +109,55 @@ const migrateSchema = () => {
     }
 
     // 3. Create accounts and categories tables if they don't exist
+    // Note: We use the new schema logic for categories here if creating from scratch in migration
     db.run(`
       CREATE TABLE IF NOT EXISTS accounts (
         id TEXT PRIMARY KEY,
         name TEXT UNIQUE,
         is_savings INTEGER DEFAULT 0
       );
-      CREATE TABLE IF NOT EXISTS categories (
-        id TEXT PRIMARY KEY,
-        name TEXT UNIQUE,
-        type TEXT,
-        group_name TEXT
-      );
     `);
+
+    // 3a. Handle Categories Schema Migration (Unique Name -> Unique Name+Type)
+    const catTableRes = db.exec("SELECT sql FROM sqlite_master WHERE type='table' AND name='categories'");
+    if (catTableRes.length === 0) {
+       // Table doesn't exist, create it with new schema
+       db.run(`
+        CREATE TABLE IF NOT EXISTS categories (
+          id TEXT PRIMARY KEY,
+          name TEXT,
+          type TEXT,
+          group_name TEXT,
+          UNIQUE(name, type)
+        );
+      `);
+    } else {
+       const sql = catTableRes[0].values[0][0] as string;
+       // Check if the current definition uses the old "name TEXT UNIQUE" constraint
+       if (sql.includes('name TEXT UNIQUE') || sql.includes('"name" TEXT UNIQUE')) {
+          console.log("Migrating database: Updating categories table to support same name with different types");
+          db.run("BEGIN TRANSACTION");
+          try {
+            db.run("ALTER TABLE categories RENAME TO categories_old");
+            db.run(`
+              CREATE TABLE categories (
+                id TEXT PRIMARY KEY,
+                name TEXT,
+                type TEXT,
+                group_name TEXT,
+                UNIQUE(name, type)
+              );
+            `);
+            // Copy data
+            db.run("INSERT INTO categories (id, name, type, group_name) SELECT id, name, type, group_name FROM categories_old");
+            db.run("DROP TABLE categories_old");
+            db.run("COMMIT");
+          } catch (e) {
+            console.error("Category migration failed", e);
+            db.run("ROLLBACK");
+          }
+       }
+    }
 
     // 3b. Migration: Check for 'is_savings' column in accounts (for existing dbs)
     const accRes = db.exec("PRAGMA table_info(accounts);");
@@ -158,7 +195,8 @@ const migrateSchema = () => {
     if (categoriesCount === 0) {
       const distinctCats = db.exec("SELECT DISTINCT category, type FROM transactions");
       if (distinctCats.length > 0) {
-        const stmt = db.prepare("INSERT INTO categories (id, name, type, group_name) VALUES (?, ?, ?, ?)");
+        // With the new UNIQUE(name, type) constraint, this will work perfectly even if name is same
+        const stmt = db.prepare("INSERT OR IGNORE INTO categories (id, name, type, group_name) VALUES (?, ?, ?, ?)");
         distinctCats[0].values.forEach((row: any[]) => {
           if (row[0]) {
             // Default to 'General' group, infer type from transaction type or default to Expense
@@ -359,7 +397,7 @@ export const generateDummyData = async () => {
   // Manually update groups for the dummy categories since insertTransactions defaults to 'General'
   db.run("BEGIN TRANSACTION");
   categories.forEach(c => {
-    db.run("UPDATE categories SET group_name = ?, type = ? WHERE name = ?", [c.group, c.type, c.name]);
+    db.run("UPDATE categories SET group_name = ? WHERE name = ? AND type = ?", [c.group, c.name, c.type]);
   });
   
   // Update Accounts to set Savings
@@ -377,6 +415,7 @@ export const insertTransactions = async (transactions: Transaction[]) => {
   db.run("BEGIN TRANSACTION");
   
   const stmtTxn = db.prepare("INSERT OR REPLACE INTO transactions VALUES (?, ?, ?, ?, ?, ?, ?)");
+  // Updated to support name+type constraint
   const stmtCat = db.prepare("INSERT OR IGNORE INTO categories (id, name, type, group_name) VALUES (?, ?, ?, ?)");
   const stmtAcc = db.prepare("INSERT OR IGNORE INTO accounts (id, name, is_savings) VALUES (?, ?, 0)");
 
@@ -535,24 +574,41 @@ export const getCategories = (): Category[] => {
   } catch (e) { return []; }
 };
 
-export const updateCategory = async (oldName: string, newName: string, type: string, group: string) => {
+export const updateCategory = async (id: string, newName: string, newType: string, group: string) => {
   if (!db) return;
+  
+  // 1. Get old data to know what to update in transactions
+  const res = db.exec("SELECT name, type FROM categories WHERE id = ?", [id]);
+  if (res.length === 0) return;
+  const oldName = res[0].values[0][0] as string;
+  const oldType = res[0].values[0][1] as string;
+
   db.run("BEGIN TRANSACTION");
-  // Update definition
-  db.run("UPDATE categories SET name = ?, type = ?, group_name = ? WHERE name = ?", [newName, type, group, oldName]);
-  // Update usage in transactions
+  
+  // 2. Update definition (ID is stable)
+  db.run("UPDATE categories SET name = ?, type = ?, group_name = ? WHERE id = ?", [newName, newType, group, id]);
+  
+  // 3. Update usage in transactions
+  // We match by name AND type to avoid renaming the wrong category if duplicates exist (e.g. Income 'General' vs Expense 'General')
   if (oldName !== newName) {
-    db.run("UPDATE transactions SET category = ? WHERE category = ?", [newName, oldName]);
+    db.run("UPDATE transactions SET category = ? WHERE category = ? AND type = ?", [newName, oldName, oldType]);
   }
+  
   db.run("COMMIT");
   await saveDB();
 };
 
-export const updateAccount = async (oldName: string, newName: string, isSavings: boolean) => {
+export const updateAccount = async (id: string, newName: string, isSavings: boolean) => {
   if (!db) return;
+  
+  // 1. Get old name
+  const res = db.exec("SELECT name FROM accounts WHERE id = ?", [id]);
+  if (res.length === 0) return;
+  const oldName = res[0].values[0][0] as string;
+
   db.run("BEGIN TRANSACTION");
   // Update definition
-  db.run("UPDATE accounts SET name = ?, is_savings = ? WHERE name = ?", [newName, isSavings ? 1 : 0, oldName]);
+  db.run("UPDATE accounts SET name = ?, is_savings = ? WHERE id = ?", [newName, isSavings ? 1 : 0, id]);
   // Update usage in transactions
   if (oldName !== newName) {
     db.run("UPDATE transactions SET account = ? WHERE account = ?", [newName, oldName]);
@@ -564,13 +620,14 @@ export const updateAccount = async (oldName: string, newName: string, isSavings:
 export const deleteCategory = async (id: string): Promise<boolean> => {
   if (!db) return false;
   
-  // 1. Get the category name first
-  const res = db.exec("SELECT name FROM categories WHERE id = ?", [id]);
+  // 1. Get the category details
+  const res = db.exec("SELECT name, type FROM categories WHERE id = ?", [id]);
   if (res.length === 0) return false;
-  const name = res[0].values[0][0];
+  const name = res[0].values[0][0] as string;
+  const type = res[0].values[0][1] as string;
 
-  // 2. Check usage in transactions
-  const countRes = db.exec("SELECT count(*) FROM transactions WHERE category = ?", [name]);
+  // 2. Check usage in transactions (match both name and type)
+  const countRes = db.exec("SELECT count(*) FROM transactions WHERE category = ? AND type = ?", [name, type]);
   const count = countRes[0].values[0][0];
 
   if (count > 0) {
@@ -603,17 +660,6 @@ export const deleteAccount = async (id: string): Promise<boolean> => {
   await saveDB();
   return true;
 };
-
-// Legacy support wrapper
-export const renameCategory = async (oldName: string, newName: string) => {
-  const cats = getCategories();
-  const cat = cats.find(c => c.name === oldName);
-  await updateCategory(oldName, newName, cat?.type || 'Expense', cat?.group || 'General');
-}
-
-export const renameAccount = async (oldName: string, newName: string) => {
-  await updateAccount(oldName, newName, false);
-}
 
 // --- Configs (API Keys & Settings) ---
 
@@ -738,21 +784,6 @@ export const runQuery = (sql: string): { columns: string[], values: any[][] } | 
     throw new Error(e.message);
   }
 };
-
-export const getDistinctValues = (column: 'category' | 'account'): string[] => {
-  if (!db) return [];
-  try {
-    // Basic sanitization, though column is strictly typed
-    const safeCol = column === 'category' ? 'category' : 'account';
-    const res = db.exec(`SELECT DISTINCT ${safeCol} FROM transactions ORDER BY ${safeCol}`);
-    if (res.length === 0) return [];
-    
-    return res[0].values.flat().filter((v: any) => v);
-  } catch (e) {
-    console.error(`Error fetching distinct ${column}`, e);
-    return [];
-  }
-}
 
 // IndexedDB Helpers
 const loadFromIndexedDB = (): Promise<ArrayBuffer | null> => {

@@ -61,7 +61,8 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.amount || !formData.description) return;
+    // Only amount is strictly required now
+    if (!formData.amount) return;
 
     let finalAmount = parseFloat(formData.amount);
     if (formData.type === TransactionType.EXPENSE) {
@@ -73,9 +74,9 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
     const newTransaction: Transaction = {
       id: initialData ? initialData.id : `manual-${Date.now()}`,
       date: new Date(formData.date).toISOString(),
-      description: formData.description,
+      description: formData.description || '', // Default to empty string
       amount: finalAmount,
-      category: formData.category || 'Uncategorized',
+      category: formData.category || 'Uncategorized', // Default to Uncategorized
       type: formData.type,
       account: formData.account || 'Cash'
     };
@@ -150,12 +151,11 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
 
           {/* Description */}
           <div>
-            <label className="block text-xs font-semibold text-slate-500 mb-1">Description</label>
+            <label className="block text-xs font-semibold text-slate-500 mb-1">Description (Optional)</label>
             <div className="relative">
               <Type className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
               <input
                 type="text"
-                required
                 value={formData.description}
                 onChange={e => setFormData({ ...formData, description: e.target.value })}
                 className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white text-slate-800 text-base sm:text-sm"
@@ -188,12 +188,11 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
 
           {/* Category (Filtered Selection or New) */}
           <div>
-            <label className="block text-xs font-semibold text-slate-500 mb-1">Category</label>
+            <label className="block text-xs font-semibold text-slate-500 mb-1">Category (Optional)</label>
             <div className="relative">
               <Tag className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
               <input
                 type="text"
-                required
                 list="category-list"
                 value={formData.category}
                 onChange={e => setFormData({ ...formData, category: e.target.value })}
@@ -207,7 +206,7 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
               </datalist>
             </div>
              <p className="text-[10px] text-slate-400 mt-1">
-               Showing {formData.type.toLowerCase()} categories. Typing a new one will create it automatically.
+               Showing {formData.type.toLowerCase()} categories. Defaults to "Uncategorized".
              </p>
           </div>
 

@@ -150,7 +150,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           
            {/* API Key Config */}
-           <div className="p-5 border border-purple-200 rounded-xl bg-purple-50/50 hover:border-purple-300 transition-all col-span-1 md:col-span-2 lg:col-span-4">
+           <div className="p-5 border border-purple-200 rounded-xl bg-purple-50/50 hover:border-purple-300 transition-all col-span-1 md:col-span-2 lg:col-span-4 flex flex-col h-full">
                 <div className="max-w-3xl">
                   <h3 className="font-semibold text-purple-800 flex items-center mb-2">
                     <Key className="w-4 h-4 mr-2 text-purple-600" />
@@ -183,9 +183,9 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                 </div>
            </div>
 
-          {/*jw Generate Dummy Data */}
+          {/* Generate Dummy Data */}
           {dbCount === 0 && (
-             <div className="p-5 border border-indigo-200 rounded-xl bg-indigo-50/50 hover:border-indigo-300 transition-allyb flex flex-col h-full">
+             <div className="p-5 border border-indigo-200 rounded-xl bg-indigo-50/50 hover:border-indigo-300 transition-all flex flex-col h-full">
                 <h3 className="font-semibold text-indigo-800 flex items-center mb-2">
                   <Wand2 className="w-4 h-4 mr-2 text-indigo-600" />
                   Demo Mode
@@ -220,7 +220,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
             </button>
           </div>
 
-          {/*Km Restore */}
+          {/* Restore */}
           <div className="p-5 border border-slate-200 rounded-xl bg-slate-50/50 hover:border-emerald-300 transition-all flex flex-col h-full">
             <h3 className="font-semibold text-slate-800 flex items-center mb-2">
               <Upload className="w-4 h-4 mr-2 text-emerald-600" />
@@ -277,7 +277,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
           <AccountList 
             accounts={accounts} 
             onCreate={handleCreateAccount}
-            onUpdate={async (old, neo, isSavings) => { await updateAccount(old, neo, isSavings); refreshData(); }}
+            onUpdate={async (id, neo, isSavings) => { await updateAccount(id, neo, isSavings); refreshData(); }}
             onDelete={async (id) => { 
                try {
                    await deleteAccount(id); 
@@ -297,7 +297,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
           </div>
           <CategoryList 
              categories={categories} 
-             onUpdate={async (old, neo, type, group) => { await updateCategory(old, neo, type, group); refreshData(); }}
+             onUpdate={async (id, neo, type, group) => { await updateCategory(id, neo, type, group); refreshData(); }}
              onDelete={async (id) => { 
                try {
                    await deleteCategory(id); 
@@ -321,10 +321,10 @@ export const AdminPage: React.FC<AdminPageProps> = ({
 const AccountList: React.FC<{ 
     accounts: Account[], 
     onCreate: (name: string, isSavings: boolean) => Promise<void>,
-    onUpdate: (old: string, neo: string, isSavings: boolean) => Promise<void>,
+    onUpdate: (id: string, neo: string, isSavings: boolean) => Promise<void>,
     onDelete: (id: string) => Promise<void>
 }> = ({ accounts, onCreate, onUpdate, onDelete }) => {
-  const [editingItem, setEditingItem] = useState<string | null>(null);
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
   const [editIsSavings, setEditIsSavings] = useState(false);
   
@@ -333,16 +333,16 @@ const AccountList: React.FC<{
   const [newAccIsSavings, setNewAccIsSavings] = useState(false);
 
   const handleStartEdit = (acc: Account) => {
-    setEditingItem(acc.name);
+    setEditingItemId(acc.id);
     setEditValue(acc.name);
     setEditIsSavings(acc.isSavings);
   };
 
   const handleSave = async () => {
-    if (editingItem && editValue && editValue.trim() !== '') {
-      await onUpdate(editingItem, editValue, editIsSavings);
+    if (editingItemId && editValue && editValue.trim() !== '') {
+      await onUpdate(editingItemId, editValue, editIsSavings);
     }
-    setEditingItem(null);
+    setEditingItemId(null);
   };
 
   const handleCreate = async () => {
@@ -386,7 +386,7 @@ const AccountList: React.FC<{
             <ul className="divide-y divide-slate-100">
             {accounts.map((acc) => (
                 <li key={acc.id} className="bg-white px-4 py-3 flex items-center justify-between hover:bg-slate-50 group">
-                {editingItem === acc.name ? (
+                {editingItemId === acc.id ? (
                     <div className="flex items-center w-full space-x-2">
                         <input 
                             className="flex-1 px-2 py-1 border rounded text-base sm:text-sm bg-white text-slate-800"
@@ -400,7 +400,7 @@ const AccountList: React.FC<{
                             <PiggyBank className="w-4 h-4" />
                          </button>
                         <button onClick={handleSave} className="text-emerald-600"><Save className="w-4 h-4" /></button>
-                        <button onClick={() => setEditingItem(null)} className="text-slate-400"><X className="w-4 h-4" /></button>
+                        <button onClick={() => setEditingItemId(null)} className="text-slate-400"><X className="w-4 h-4" /></button>
                     </div>
                 ) : (
                     <>
@@ -433,22 +433,22 @@ const AccountList: React.FC<{
 
 const CategoryList: React.FC<{ 
   categories: Category[], 
-  onUpdate: (old: string, neo: string, type: string, group: string) => Promise<void>,
+  onUpdate: (id: string, neo: string, type: string, group: string) => Promise<void>,
   onDelete: (id: string) => Promise<void>
 }> = ({ categories, onUpdate, onDelete }) => {
-  const [editingItem, setEditingItem] = useState<string | null>(null);
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [formData, setFormData] = useState({ name: '', type: 'Expense', group: 'General' });
 
   const handleStartEdit = (cat: Category) => {
-    setEditingItem(cat.name);
+    setEditingItemId(cat.id);
     setFormData({ name: cat.name, type: cat.type, group: cat.group });
   };
 
   const handleSave = async () => {
-    if (editingItem && formData.name) {
-      await onUpdate(editingItem, formData.name, formData.type, formData.group);
+    if (editingItemId && formData.name) {
+      await onUpdate(editingItemId, formData.name, formData.type, formData.group);
     }
-    setEditingItem(null);
+    setEditingItemId(null);
   };
 
   return (
@@ -456,7 +456,7 @@ const CategoryList: React.FC<{
         <ul className="divide-y divide-slate-100">
           {categories.map((cat) => (
             <li key={cat.id} className="bg-white px-4 py-3 hover:bg-slate-50 group">
-               {editingItem === cat.name ? (
+               {editingItemId === cat.id ? (
                   <div className="space-y-2">
                     <div className="flex items-center space-x-2">
                       <input 
@@ -465,7 +465,7 @@ const CategoryList: React.FC<{
                         onChange={e => setFormData({...formData, name: e.target.value})}
                       />
                       <button onClick={handleSave} className="text-emerald-600"><Save className="w-4 h-4" /></button>
-                      <button onClick={() => setEditingItem(null)} className="text-slate-400"><X className="w-4 h-4" /></button>
+                      <button onClick={() => setEditingItemId(null)} className="text-slate-400"><X className="w-4 h-4" /></button>
                     </div>
                     <div className="flex space-x-2">
                        <select 
