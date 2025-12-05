@@ -1,11 +1,11 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
   PieChart, Pie, Cell, Legend
 } from 'recharts';
 import { 
   TrendingUp, TrendingDown, DollarSign, Activity, CreditCard, Wallet, Edit2, Trash2,
-  ChevronDown, ChevronUp, BarChart3, Layers, ArrowRight, Calendar, Filter
+  ChevronDown, ChevronUp, BarChart3, Layers, ArrowRight, Calendar, Filter, ChevronLeft, ChevronRight
 } from 'lucide-react';
 import { Transaction, FinancialSummary, Category, TransactionType } from '../types';
 import { formatCurrency, aggregateData, getMonthYearLabel } from '../utils/helpers';
@@ -40,12 +40,19 @@ const StatCard: React.FC<{
 
 export const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, onEdit, onDelete, onNavigateToAdmin }) => {
   const [showCharts, setShowCharts] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(25);
   
   // Initialize filter with current month (YYYY-MM)
   const [dateFilter, setDateFilter] = useState<string>(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   });
+
+  // Reset to page 1 when filter or data changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [dateFilter, transactions, itemsPerPage]);
 
   // 1. Extract unique months for the filter dropdown
   const availableMonths = useMemo(() => {
@@ -73,6 +80,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, 
     if (dateFilter === 'all') return transactions;
     return transactions.filter(t => t.date.startsWith(dateFilter));
   }, [transactions, dateFilter]);
+
+  // Pagination Logic
+  const totalPages = Math.ceil(filteredTransactions.length / itemsPerPage);
+  const paginatedTransactions = useMemo(() => {
+    const start = (currentPage - 1) * itemsPerPage;
+    return filteredTransactions.slice(start, start + itemsPerPage);
+  }, [filteredTransactions, currentPage, itemsPerPage]);
 
   // 3. Compute Aggregates
   // 'overallSummary' is used for Account Balances (current state)
@@ -179,7 +193,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, 
           colorClass="bg-red-100" 
         />
         <StatCard 
-          title="Net Savings" 
+          title="Net Balance" 
           amount={periodSummary.netSavings} 
           icon={<DollarSign className="w-6 h-6 text-blue-600" />} 
           colorClass="bg-blue-100" 
@@ -329,7 +343,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, 
         )}
       </div>
 
-       {/* Transaction List (Filtered) */}
+       {/* Transaction List (Filtered & Paginated) */}
       <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
         <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center">
           <h3 className="font-semibold text-slate-800">Transactions</h3>
@@ -352,7 +366,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, 
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {filteredTransactions.slice(0, 50).map((t) => (
+              {paginatedTransactions.map((t) => (
                 <tr key={t.id} className="hover:bg-slate-50 transition-colors group">
                   <td className="px-4 sm:px-6 py-3 text-slate-600 whitespace-nowrap">{new Date(t.date).toLocaleDateString()}</td>
                   <td className="px-6 py-3 text-slate-800 font-medium whitespace-nowrap hidden md:table-cell">{t.account}</td>
@@ -370,7 +384,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, 
                   </td>
                   <td className="px-4 sm:px-6 py-3 text-right whitespace-nowrap">
                     <div className="flex items-center justify-end space-x-2">
-                      {/* Always visible on mobile, no group-hover check for better UX */}
                       <button 
                         onClick={() => onEdit(t)}
                         className="p-1 text-slate-400 hover:text-blue-600 transition-colors"
@@ -398,12 +411,45 @@ export const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, 
               )}
             </tbody>
           </table>
-          {filteredTransactions.length > 50 && (
-            <div className="px-6 py-3 bg-slate-50 text-center text-xs text-slate-500 border-t border-slate-100">
-              Showing first 50 transactions of {filteredTransactions.length}
-            </div>
-          )}
         </div>
+        
+        {/* Pagination Controls */}
+        {totalPages > 0 && (
+            <div className="px-6 py-4 flex flex-col sm:flex-row items-center justify-between border-t border-slate-100 bg-slate-50 gap-4">
+                <div className="flex items-center space-x-2">
+                   <span className="text-xs text-slate-500">Show:</span>
+                   <select 
+                      value={itemsPerPage} 
+                      onChange={(e) => setItemsPerPage(Number(e.target.value))}
+                      className="text-xs border border-slate-200 rounded px-2 py-1 bg-white text-slate-700 focus:ring-1 focus:ring-blue-500 outline-none"
+                   >
+                      <option value={10}>10</option>
+                      <option value={25}>25</option>
+                      <option value={50}>50</option>
+                   </select>
+                </div>
+
+                <div className="flex items-center space-x-4">
+                  <button
+                      onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                      disabled={currentPage === 1}
+                      className="p-2 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                      <ChevronLeft className="w-4 h-4" />
+                  </button>
+                  <span className="text-sm text-slate-500 font-medium">
+                      Page {currentPage} of {totalPages}
+                  </span>
+                  <button
+                      onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                      disabled={currentPage === totalPages}
+                      className="p-2 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                      <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
+            </div>
+        )}
       </div>
     </div>
   );

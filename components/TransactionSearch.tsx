@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Search, Filter, X, Calendar, Tag, CreditCard, ArrowDown, ArrowUp, Loader2, Edit2, Trash2 } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Search, Filter, X, Calendar, Tag, CreditCard, ArrowDown, ArrowUp, Loader2, Edit2, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Transaction, Category, Account, SearchFilters, TransactionType } from '../types';
 import { searchTransactions } from '../services/db';
 import { formatCurrency } from '../utils/helpers';
@@ -14,6 +14,10 @@ interface TransactionSearchProps {
 export const TransactionSearch: React.FC<TransactionSearchProps> = ({ categories, accounts, onEdit, onDelete }) => {
   const [results, setResults] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(false);
+  
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(25);
   
   const [filters, setFilters] = useState<SearchFilters>({
     keyword: '',
@@ -33,6 +37,7 @@ export const TransactionSearch: React.FC<TransactionSearchProps> = ({ categories
 
   const handleSearch = () => {
     setLoading(true);
+    setCurrentPage(1); // Reset to first page on new search
     // Small timeout to allow UI to render loader
     setTimeout(() => {
         const data = searchTransactions(filters);
@@ -52,6 +57,7 @@ export const TransactionSearch: React.FC<TransactionSearchProps> = ({ categories
         minAmount: '',
         maxAmount: ''
     });
+    setCurrentPage(1);
     // Trigger search after state update would normally require useEffect, 
     // but here we can just pass empty filters directly to search
     const emptyFilters = { keyword: '', category: '', account: '', type: '', startDate: '', endDate: '', minAmount: '', maxAmount: '' };
@@ -65,6 +71,13 @@ export const TransactionSearch: React.FC<TransactionSearchProps> = ({ categories
         setResults(prev => prev.filter(t => t.id !== id));
     }
   }
+
+  // Calculate pagination
+  const totalPages = Math.ceil(results.length / itemsPerPage);
+  const paginatedResults = useMemo(() => {
+    const start = (currentPage - 1) * itemsPerPage;
+    return results.slice(start, start + itemsPerPage);
+  }, [results, currentPage, itemsPerPage]);
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -203,7 +216,7 @@ export const TransactionSearch: React.FC<TransactionSearchProps> = ({ categories
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {results.length === 0 ? (
+              {paginatedResults.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="px-6 py-12 text-center text-slate-400">
                     <Filter className="w-12 h-12 mx-auto mb-3 text-slate-200" />
@@ -211,7 +224,7 @@ export const TransactionSearch: React.FC<TransactionSearchProps> = ({ categories
                   </td>
                 </tr>
               ) : (
-                results.map((t) => (
+                paginatedResults.map((t) => (
                   <tr key={t.id} className="hover:bg-slate-50 transition-colors group">
                     <td className="px-4 sm:px-6 py-3 text-slate-600 whitespace-nowrap">
                         {new Date(t.date).toLocaleDateString()}
@@ -250,6 +263,48 @@ export const TransactionSearch: React.FC<TransactionSearchProps> = ({ categories
             </tbody>
           </table>
         </div>
+        
+        {/* Pagination Controls */}
+        {totalPages > 0 && (
+            <div className="px-6 py-4 flex flex-col sm:flex-row items-center justify-between border-t border-slate-100 bg-slate-50 gap-4">
+                <div className="flex items-center space-x-2">
+                   <span className="text-xs text-slate-500">Show:</span>
+                   <select 
+                      value={itemsPerPage} 
+                      onChange={(e) => {
+                          setItemsPerPage(Number(e.target.value));
+                          setCurrentPage(1); // Reset to page 1 on size change
+                      }}
+                      className="text-xs border border-slate-200 rounded px-2 py-1 bg-white text-slate-700 focus:ring-1 focus:ring-blue-500 outline-none"
+                   >
+                      <option value={10}>10</option>
+                      <option value={25}>25</option>
+                      <option value={50}>50</option>
+                   </select>
+                </div>
+
+                <div className="flex items-center space-x-4">
+                  <button
+                      onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                      disabled={currentPage === 1}
+                      className="p-2 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                      <ChevronLeft className="w-4 h-4" />
+                  </button>
+                  <span className="text-sm text-slate-500 font-medium">
+                      Page {currentPage} of {totalPages}
+                  </span>
+                  <button
+                      onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                      disabled={currentPage === totalPages}
+                      className="p-2 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                      <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
+            </div>
+        )}
+        
         {results.length >= 500 && (
             <div className="p-3 bg-yellow-50 text-yellow-700 text-xs text-center border-t border-yellow-100">
                 Display limited to 500 most recent results. Refine your search for more specific data.
