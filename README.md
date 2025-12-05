@@ -6,7 +6,9 @@ Finan$$as is a local-first, privacy-focused personal finance application that tu
 
 *   **Local-First Architecture:** No backend server. Data is stored entirely in your browser using SQLite Wasm and IndexedDB.
 *   **Excel/CSV Import:** Advanced importer with support for column mapping, split income/expense columns, and manual overrides.
+*   **Manual Entry & Transfers:** Record income, expenses, and transfers between accounts directly within the app.
 *   **Interactive Dashboard:** Visualize cash flow, detailed expense breakdowns, and account balances.
+*   **Mobile Optimized:** Fully responsive design ensures a great experience on phones and tablets.
 *   **AI Insights:** Analyze spending habits and chat with your data using Google Gemini.
 *   **Savings Goals:** Track progress towards financial targets with multi-account support.
 *   **SQL Console:** Run raw SQL queries directly against your financial data.

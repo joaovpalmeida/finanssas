@@ -1,5 +1,5 @@
 import React from 'react';
-import { Shield, Lock, Cpu, LayoutDashboard, Brain, FileSpreadsheet, ArrowRight, Database, Code2 } from 'lucide-react';
+import { Shield, Lock, Cpu, LayoutDashboard, Brain, FileSpreadsheet, ArrowRight, Database, Code2, Smartphone } from 'lucide-react';
 
 interface LandingPageProps {
   onGetStarted: () => void;
@@ -15,8 +15,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted }) => {
           Your Finances, <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-cyan-500">Privately Managed</span>.
         </h1>
         <p className="text-lg md:text-xl text-slate-600 max-w-2xl mx-auto leading-relaxed">
-          Finan$$as transforms your static Excel spreadsheets into a powerful, interactive dashboard. 
-          Built with a focus on absolute data privacy and enhanced by local-first AI.
+          Finan$$as is a comprehensive personal finance tool. Import your bank statements or track spending manually—all securely stored in your browser.
         </p>
         <div className="flex justify-center gap-4 pt-4">
           <button 
@@ -101,9 +100,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted }) => {
             <div className="w-10 h-10 bg-indigo-100 rounded-lg flex items-center justify-center text-indigo-600 mb-4">
               <FileSpreadsheet className="w-5 h-5" />
             </div>
-            <h4 className="text-lg font-bold text-slate-800 mb-2">Excel Import</h4>
+            <h4 className="text-lg font-bold text-slate-800 mb-2">Flexible Data Entry</h4>
             <p className="text-slate-600 text-sm">
-              Drag and drop your bank statements. Map columns intelligently regardless of the format.
+              Bulk import Excel/CSV files with smart mapping, or manually track expenses and transfers on the go.
             </p>
           </div>
           
@@ -119,11 +118,11 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted }) => {
 
           <div className="p-6 bg-white rounded-xl shadow-sm border border-slate-100 hover:shadow-md transition-shadow">
             <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center text-orange-600 mb-4">
-              <LayoutDashboard className="w-5 h-5" />
+              <Smartphone className="w-5 h-5" />
             </div>
-            <h4 className="text-lg font-bold text-slate-800 mb-2">Interactive Dashboard</h4>
+            <h4 className="text-lg font-bold text-slate-800 mb-2">Mobile Dashboard</h4>
             <p className="text-slate-600 text-sm">
-              Visualize your cash flow, track savings goals, and categorize expenses with detailed charts.
+              Visualize cash flow, track savings goals, and monitor account balances from any device.
             </p>
           </div>
         </div>
