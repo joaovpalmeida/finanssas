@@ -1,16 +1,26 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, Suspense } from 'react';
 import { Wallet, Loader2, Plus, Settings, Target, Search, Home, Menu, X, BarChart3, Sparkles } from 'lucide-react';
-import { Dashboard } from './components/Dashboard';
-import { Insights } from './components/Insights';
-import { AdminPage } from './components/AdminPage';
-import { SavingsGoals } from './components/SavingsGoals';
-import { LandingPage } from './components/LandingPage';
-import { AddTransactionModal } from './components/AddTransactionModal';
-import { TransactionSearch } from './components/TransactionSearch';
-import { parseExcelFile, ColumnMapping } from './utils/excelParser';
-import { Transaction, Account, Category, TransactionType } from './types';
+import { Transaction, Account, Category } from './types';
 import { initDB, insertTransactions, getAllTransactions, resetDB, exportDatabaseBlob, deleteTransaction, getAccounts, getCategories, importDatabase } from './services/db';
-import { calculateRunningBalances, formatCurrency, aggregateData } from './utils/helpers';
+import { calculateRunningBalances, aggregateData } from './utils/helpers';
+
+// Lazy Load Components
+// We use the .then() pattern to handle named exports (export const ...)
+const Dashboard = React.lazy(() => import('./components/Dashboard').then(module => ({ default: module.Dashboard })));
+const Insights = React.lazy(() => import('./components/Insights').then(module => ({ default: module.Insights })));
+const AdminPage = React.lazy(() => import('./components/AdminPage').then(module => ({ default: module.AdminPage })));
+const SavingsGoals = React.lazy(() => import('./components/SavingsGoals').then(module => ({ default: module.SavingsGoals })));
+const LandingPage = React.lazy(() => import('./components/LandingPage').then(module => ({ default: module.LandingPage })));
+const TransactionSearch = React.lazy(() => import('./components/TransactionSearch').then(module => ({ default: module.TransactionSearch })));
+const AddTransactionModal = React.lazy(() => import('./components/AddTransactionModal').then(module => ({ default: module.AddTransactionModal })));
+
+// Loading Fallback Component
+const PageLoader = () => (
+  <div className="flex flex-col items-center justify-center min-h-[50vh] w-full animate-fade-in">
+    <Loader2 className="w-10 h-10 text-blue-600 animate-spin mb-3" />
+    <p className="text-slate-500 text-sm font-medium">Loading...</p>
+  </div>
+);
 
 function App() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -257,61 +267,67 @@ function App() {
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="space-y-8">
-          {activeTab === 'landing' && (
-            <LandingPage onGetStarted={() => setActiveTab('dashboard')} />
-          )}
-          {activeTab === 'dashboard' && (
-            <Dashboard 
-              transactions={transactions} 
-              categories={categories}
-              accounts={accounts}
-              onEdit={handleEditClick}
-              onDelete={(id) => { 
-                  if(confirm("Are you sure?")) handleDeleteTransaction(id); 
-              }}
-              onNavigateToAdmin={() => setActiveTab('admin')}
-            />
-          )}
-          {activeTab === 'search' && (
-            <TransactionSearch 
-              categories={categories} 
-              accounts={accounts} 
-              onEdit={handleEditClick}
-              onDelete={handleDeleteTransaction}
-            />
-          )}
-          {activeTab === 'insights' && <Insights transactions={transactions} />}
-          {activeTab === 'savings' && (
-            <SavingsGoals 
-              accountBalances={accountBalances} 
-            />
-          )}
-          {activeTab === 'admin' && (
-            <AdminPage 
-              onBackup={handleBackup} 
-              onRestore={handleRestore}
-              onReset={handleReset} 
-              onRefresh={refreshTransactions}
-              onUpload={handleFileUpload}
-              isUploading={isLoading}
-              uploadError={error}
-            />
-          )}
-        </div>
+        <Suspense fallback={<PageLoader />}>
+          <div className="space-y-8">
+            {activeTab === 'landing' && (
+              <LandingPage onGetStarted={() => setActiveTab('dashboard')} />
+            )}
+            {activeTab === 'dashboard' && (
+              <Dashboard 
+                transactions={transactions} 
+                categories={categories}
+                accounts={accounts}
+                onEdit={handleEditClick}
+                onDelete={(id) => { 
+                    if(confirm("Are you sure?")) handleDeleteTransaction(id); 
+                }}
+                onNavigateToAdmin={() => setActiveTab('admin')}
+              />
+            )}
+            {activeTab === 'search' && (
+              <TransactionSearch 
+                categories={categories} 
+                accounts={accounts} 
+                onEdit={handleEditClick}
+                onDelete={handleDeleteTransaction}
+              />
+            )}
+            {activeTab === 'insights' && <Insights transactions={transactions} />}
+            {activeTab === 'savings' && (
+              <SavingsGoals 
+                accountBalances={accountBalances} 
+              />
+            )}
+            {activeTab === 'admin' && (
+              <AdminPage 
+                onBackup={handleBackup} 
+                onRestore={handleRestore}
+                onReset={handleReset} 
+                onRefresh={refreshTransactions}
+                onUpload={handleFileUpload}
+                isUploading={isLoading}
+                uploadError={error}
+              />
+            )}
+          </div>
+        </Suspense>
       </main>
 
-      <AddTransactionModal 
-        isOpen={isModalOpen}
-        onClose={() => {
-          setIsModalOpen(false);
-          setEditingTransaction(null);
-        }}
-        onSave={handleSaveTransaction}
-        categories={categories}
-        accounts={accounts}
-        initialData={editingTransaction}
-      />
+      <Suspense fallback={null}>
+        {isModalOpen && (
+          <AddTransactionModal 
+            isOpen={isModalOpen}
+            onClose={() => {
+              setIsModalOpen(false);
+              setEditingTransaction(null);
+            }}
+            onSave={handleSaveTransaction}
+            categories={categories}
+            accounts={accounts}
+            initialData={editingTransaction}
+          />
+        )}
+      </Suspense>
     </div>
   );
 }
