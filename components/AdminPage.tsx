@@ -22,7 +22,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
   onUpload,
   onRestore, 
   isUploading, 
-  uploadError 
+  uploadError
 }) => {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);

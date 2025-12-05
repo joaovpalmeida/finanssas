@@ -1,4 +1,5 @@
 import { Transaction, TransactionType, SavingsGoal, Category, Account, CategoryGroup, SearchFilters } from '../types';
+import { generateTransactionSignature } from '../utils/helpers';
 
 let db: any = null;
 let SQL: any = null;
@@ -285,6 +286,33 @@ export const getTransactionCount = (): number => {
     return 0;
   } catch(e) {
     return 0;
+  }
+};
+
+export const getExistingSignatures = (): Set<string> => {
+  if (!db) return new Set();
+  try {
+    // Select only needed fields to construct signature
+    const res = db.exec("SELECT date, amount, description FROM transactions");
+    if (res.length === 0) return new Set();
+
+    const values = res[0].values;
+    const signatures = new Set<string>();
+
+    values.forEach((row: any[]) => {
+      // Reconstruct minimal object for signature generation
+      const t = {
+        date: row[0],
+        amount: row[1],
+        description: row[2]
+      } as Transaction;
+      signatures.add(generateTransactionSignature(t));
+    });
+
+    return signatures;
+  } catch (e) {
+    console.error("Error fetching existing signatures", e);
+    return new Set();
   }
 };
 

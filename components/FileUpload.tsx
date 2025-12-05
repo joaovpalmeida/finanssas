@@ -1,13 +1,20 @@
-import React, { useCallback, useState } from 'react';
-import { Upload, FileSpreadsheet, Loader2, AlertCircle, ArrowRight, Settings, Layers, ChevronRight, ArrowLeft, Table, Calendar, Columns, ArrowDownToLine, ArrowUpFromLine, Eye, Type, Tag } from 'lucide-react';
+import React, { useCallback, useState, useMemo, useEffect } from 'react';
+import { Upload, FileSpreadsheet, Loader2, AlertCircle, ArrowRight, Settings, Layers, ChevronRight, ArrowLeft, Table, Calendar, Columns, ArrowDownToLine, ArrowUpFromLine, Eye, Type, Tag, CheckSquare, Square, AlertTriangle } from 'lucide-react';
 import { getExcelColumns, getExcelSheetNames, parseExcelFile, ColumnMapping, ExcelColumn } from '../utils/excelParser';
 import { Transaction } from '../types';
-import { formatCurrency } from '../utils/helpers';
+import { formatCurrency, generateTransactionSignature } from '../utils/helpers';
+import { getExistingSignatures } from '../services/db';
 
 interface FileUploadProps {
   onUpload: (data: Transaction[]) => void;
   isLoading: boolean;
   error?: string | null;
+}
+
+type DuplicateStatus = 'none' | 'db' | 'file';
+
+interface PreviewTransaction extends Transaction {
+  duplicateStatus: DuplicateStatus;
 }
 
 export const FileUpload: React.FC<FileUploadProps> = ({ onUpload, isLoading, error }) => {
@@ -23,7 +30,8 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onUpload, isLoading, err
   const [selectedSheet, setSelectedSheet] = useState<string>('');
   
   const [amountMode, setAmountMode] = useState<'single' | 'split'>('single');
-  const [parsedPreview, setParsedPreview] = useState<Transaction[]>([]);
+  const [parsedPreview, setParsedPreview] = useState<PreviewTransaction[]>([]);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isParsing, setIsParsing] = useState(false);
   const [parseError, setParseError] = useState<string | null>(null);
   
@@ -154,7 +162,36 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onUpload, isLoading, err
         if (data.length === 0) {
              setParseError("No valid transactions found with the current mapping. Please check row ranges and column selections.");
         } else {
-            setParsedPreview(data);
+            // DUPLICATE DETECTION LOGIC
+            const existingSignatures = getExistingSignatures();
+            const processedPreview: PreviewTransaction[] = [];
+            const fileSignatures = new Set<string>();
+            const initialSelection = new Set<string>();
+
+            data.forEach(t => {
+                const sig = generateTransactionSignature(t);
+                let status: DuplicateStatus = 'none';
+
+                // Check DB
+                if (existingSignatures.has(sig)) {
+                    status = 'db';
+                } 
+                // Check internal duplicates in current file
+                else if (fileSignatures.has(sig)) {
+                    status = 'file';
+                }
+
+                // If no duplicate, auto-select
+                if (status === 'none') {
+                    initialSelection.add(t.id);
+                }
+
+                fileSignatures.add(sig);
+                processedPreview.push({ ...t, duplicateStatus: status });
+            });
+
+            setParsedPreview(processedPreview);
+            setSelectedIds(initialSelection);
             setStep('preview');
         }
     } catch (e: any) {
@@ -165,7 +202,17 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onUpload, isLoading, err
   };
 
   const handleConfirmImport = () => {
-    onUpload(parsedPreview);
+    // Only import selected transactions
+    const toImport = parsedPreview
+        .filter(t => selectedIds.has(t.id))
+        .map(({ duplicateStatus, ...t }) => t); // Remove internal status prop
+    
+    if (toImport.length === 0) {
+        alert("No transactions selected for import.");
+        return;
+    }
+    
+    onUpload(toImport);
   };
 
   const cancelUpload = () => {
@@ -179,6 +226,25 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onUpload, isLoading, err
       manualDescription: '', manualCategory: '', manualIncomeCategory: '', manualExpenseCategory: '',
       startRow: 2, incomeStartRow: 2, expenseStartRow: 2 
     });
+  };
+
+  const toggleSelection = (id: string) => {
+    const newSet = new Set(selectedIds);
+    if (newSet.has(id)) {
+        newSet.delete(id);
+    } else {
+        newSet.add(id);
+    }
+    setSelectedIds(newSet);
+  };
+
+  const toggleSelectAll = (shouldSelect: boolean) => {
+      if (shouldSelect) {
+          const allIds = parsedPreview.map(t => t.id);
+          setSelectedIds(new Set(allIds));
+      } else {
+          setSelectedIds(new Set());
+      }
   };
 
   // Render Helpers
@@ -264,10 +330,14 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onUpload, isLoading, err
     </div>
   );
 
-  // Step 4: Preview (Same as before)
+  // Step 4: Preview
   if (step === 'preview') {
-    const totalIncome = parsedPreview.filter(t => t.type === 'Income').reduce((s, t) => s + t.amount, 0);
-    const totalExpense = parsedPreview.filter(t => t.type === 'Expense').reduce((s, t) => s + Math.abs(t.amount), 0);
+    // Only calculate totals for SELECTED items
+    const selectedTransactions = parsedPreview.filter(t => selectedIds.has(t.id));
+    const totalIncome = selectedTransactions.filter(t => t.type === 'Income').reduce((s, t) => s + t.amount, 0);
+    const totalExpense = selectedTransactions.filter(t => t.type === 'Expense').reduce((s, t) => s + Math.abs(t.amount), 0);
+    
+    const duplicateCount = parsedPreview.filter(t => t.duplicateStatus !== 'none').length;
 
     return (
       <div className="w-full max-w-4xl mx-auto p-6 bg-slate-50 rounded-xl border border-slate-200 animate-fade-in">
@@ -281,15 +351,48 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onUpload, isLoading, err
             </span>
          </div>
 
-         <div className="flex gap-4 mb-4 text-sm">
-            <div className="bg-white px-4 py-2 rounded-lg border border-slate-200">
-               <span className="text-slate-500 block text-xs uppercase font-bold">Total Income</span>
+         {/* Stats */}
+         <div className="flex flex-wrap gap-4 mb-4 text-sm">
+            <div className="bg-white px-4 py-2 rounded-lg border border-slate-200 flex-1">
+               <span className="text-slate-500 block text-xs uppercase font-bold">Selected Income</span>
                <span className="text-emerald-600 font-bold">{formatCurrency(totalIncome)}</span>
             </div>
-            <div className="bg-white px-4 py-2 rounded-lg border border-slate-200">
-               <span className="text-slate-500 block text-xs uppercase font-bold">Total Expense</span>
+            <div className="bg-white px-4 py-2 rounded-lg border border-slate-200 flex-1">
+               <span className="text-slate-500 block text-xs uppercase font-bold">Selected Expense</span>
                <span className="text-red-600 font-bold">{formatCurrency(totalExpense)}</span>
             </div>
+            {duplicateCount > 0 && (
+                <div className="bg-amber-50 px-4 py-2 rounded-lg border border-amber-200 flex-1 flex items-center">
+                    <div>
+                        <span className="text-amber-700 block text-xs uppercase font-bold flex items-center">
+                            <AlertTriangle className="w-3 h-3 mr-1" />
+                            Potential Duplicates
+                        </span>
+                        <span className="text-amber-800 font-bold">{duplicateCount} skipped by default</span>
+                    </div>
+                </div>
+            )}
+         </div>
+
+         {/* Toolbar */}
+         <div className="flex items-center justify-between py-2 border-b border-slate-200 mb-2">
+             <div className="flex items-center space-x-4 text-sm">
+                 <button 
+                    onClick={() => toggleSelectAll(true)}
+                    className="text-blue-600 hover:text-blue-800 font-medium"
+                 >
+                    Select All
+                 </button>
+                 <button 
+                    onClick={() => toggleSelectAll(false)}
+                    className="text-slate-500 hover:text-slate-700"
+                 >
+                    Deselect All
+                 </button>
+             </div>
+             <span className="text-xs text-slate-400">
+                 {selectedIds.size} of {parsedPreview.length} selected
+             </span>
          </div>
 
          <div className="bg-white border border-slate-200 rounded-lg overflow-hidden h-96 mb-6 flex flex-col">
@@ -297,6 +400,9 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onUpload, isLoading, err
               <table className="w-full text-sm text-left">
                   <thead className="bg-slate-50 text-slate-500 font-medium sticky top-0 z-10 border-b border-slate-100 shadow-sm">
                     <tr>
+                      <th className="px-4 py-2 w-10 text-center bg-slate-50">
+                          <CheckSquare className="w-4 h-4 mx-auto text-slate-300" />
+                      </th>
                       <th className="px-4 py-2 whitespace-nowrap bg-slate-50">Date</th>
                       <th className="px-4 py-2 whitespace-nowrap bg-slate-50">Description</th>
                       <th className="px-4 py-2 whitespace-nowrap bg-slate-50">Category</th>
@@ -305,26 +411,43 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onUpload, isLoading, err
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {parsedPreview.slice(0, 100).map((t) => (
-                      <tr key={t.id} className="hover:bg-slate-50">
-                        <td className="px-4 py-2 text-slate-600 whitespace-nowrap">{new Date(t.date).toLocaleDateString()}</td>
-                        <td className="px-4 py-2 text-slate-800 max-w-xs truncate">{t.description}</td>
-                        <td className="px-4 py-2 text-slate-600">
-                          <span className="px-2 py-0.5 bg-slate-100 rounded text-xs">{t.category}</span>
-                        </td>
-                        <td className={`px-4 py-2 text-right font-medium ${t.type === 'Income' ? 'text-emerald-600' : 'text-slate-800'}`}>
-                          {t.type === 'Income' ? '+' : ''}{formatCurrency(t.amount)}
-                        </td>
-                        <td className="px-4 py-2 text-slate-500 text-xs">{t.account}</td>
-                      </tr>
-                    ))}
+                    {parsedPreview.map((t) => {
+                      const isSelected = selectedIds.has(t.id);
+                      const isDup = t.duplicateStatus !== 'none';
+                      const rowClass = isDup ? (isSelected ? 'bg-amber-50 hover:bg-amber-100' : 'bg-amber-50/50 opacity-60 hover:opacity-100') : (isSelected ? 'bg-white hover:bg-slate-50' : 'bg-slate-50/50 hover:bg-slate-50');
+
+                      return (
+                        <tr key={t.id} className={`${rowClass} transition-colors cursor-pointer`} onClick={() => toggleSelection(t.id)}>
+                          <td className="px-4 py-2 text-center" onClick={(e) => e.stopPropagation()}>
+                             <button onClick={() => toggleSelection(t.id)} className="focus:outline-none">
+                                 {isSelected ? (
+                                     <CheckSquare className={`w-5 h-5 ${isDup ? 'text-amber-600' : 'text-blue-600'}`} />
+                                 ) : (
+                                     <Square className="w-5 h-5 text-slate-300 hover:text-slate-400" />
+                                 )}
+                             </button>
+                          </td>
+                          <td className="px-4 py-2 text-slate-600 whitespace-nowrap">{new Date(t.date).toLocaleDateString()}</td>
+                          <td className="px-4 py-2 text-slate-800 max-w-xs truncate">
+                              {t.description}
+                              {isDup && (
+                                  <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-100 text-amber-800">
+                                      {t.duplicateStatus === 'db' ? 'In DB' : 'Duplicate in File'}
+                                  </span>
+                              )}
+                          </td>
+                          <td className="px-4 py-2 text-slate-600">
+                            <span className="px-2 py-0.5 bg-slate-100 rounded text-xs">{t.category}</span>
+                          </td>
+                          <td className={`px-4 py-2 text-right font-medium ${t.type === 'Income' ? 'text-emerald-600' : 'text-slate-800'}`}>
+                            {t.type === 'Income' ? '+' : ''}{formatCurrency(t.amount)}
+                          </td>
+                          <td className="px-4 py-2 text-slate-500 text-xs">{t.account}</td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
               </table>
-              {parsedPreview.length > 100 && (
-                 <div className="p-2 text-center text-xs text-slate-400 bg-slate-50 border-t border-slate-100">
-                   Showing first 100 rows only
-                 </div>
-              )}
             </div>
          </div>
 
@@ -337,11 +460,11 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onUpload, isLoading, err
             </button>
             <button 
               onClick={handleConfirmImport}
-              disabled={isLoading}
-              className="flex items-center px-6 py-2 bg-emerald-600 text-white rounded-lg font-medium hover:bg-emerald-700 transition-colors shadow-sm"
+              disabled={isLoading || selectedIds.size === 0}
+              className="flex items-center px-6 py-2 bg-emerald-600 text-white rounded-lg font-medium hover:bg-emerald-700 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Upload className="w-4 h-4 mr-2" />}
-              Confirm Import
+              Import {selectedIds.size} Transactions
             </button>
          </div>
       </div>

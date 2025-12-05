@@ -27,6 +27,15 @@ export const calculateMonthsBetween = (d1: Date, d2: Date): number => {
   return months <= 0 ? 0 : months;
 };
 
+// Generates a unique signature for duplicate detection
+// Format: YYYY-MM-DD_AMOUNT_DESCRIPTION(lowercase/trimmed)
+export const generateTransactionSignature = (t: Transaction): string => {
+  const dateStr = new Date(t.date).toISOString().split('T')[0];
+  const amtStr = Math.abs(t.amount).toFixed(2); // Use absolute to handle sign inconsistencies
+  const descStr = t.description.trim().toLowerCase();
+  return `${dateStr}_${amtStr}_${descStr}`;
+};
+
 export const calculateRunningBalances = (transactions: Transaction[]): Transaction[] => {
   // 1. Group by Account
   const grouped: Record<string, Transaction[]> = {};
