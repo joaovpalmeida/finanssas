@@ -451,67 +451,80 @@ const CategoryList: React.FC<{
     setEditingItemId(null);
   };
 
+  const renderCategoryItem = (cat: Category) => (
+    <li key={cat.id} className="bg-white px-4 py-3 hover:bg-slate-50 group border-b border-slate-50 last:border-b-0">
+        {editingItemId === cat.id ? (
+            <div className="space-y-2">
+            <div className="flex items-center space-x-2">
+                <input 
+                className="flex-1 px-2 py-1 border rounded text-base sm:text-sm bg-white text-slate-800"
+                value={formData.name}
+                onChange={e => setFormData({...formData, name: e.target.value})}
+                />
+                <button onClick={handleSave} className="text-emerald-600"><Save className="w-4 h-4" /></button>
+                <button onClick={() => setEditingItemId(null)} className="text-slate-400"><X className="w-4 h-4" /></button>
+            </div>
+            <div className="flex space-x-2">
+                <select 
+                className="flex-1 text-xs border rounded p-1 bg-white text-slate-800"
+                value={formData.type}
+                onChange={e => setFormData({...formData, type: e.target.value})}
+                >
+                    <option value="Expense">Expense</option>
+                    <option value="Income">Income</option>
+                </select>
+                <select 
+                className="flex-1 text-xs border rounded p-1 bg-white text-slate-800"
+                value={formData.group}
+                onChange={e => setFormData({...formData, group: e.target.value})}
+                >
+                    <option value="General">General</option>
+                    <option value="Recurring">Recurring</option>
+                </select>
+            </div>
+            </div>
+        ) : (
+            <div className="flex justify-between items-center">
+            <div>
+                <span className="text-sm font-medium text-slate-700 block">{cat.name}</span>
+                <div className="flex items-center space-x-2 mt-0.5">
+                <span className="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded">
+                    {cat.group}
+                </span>
+                </div>
+            </div>
+            <div className="flex items-center space-x-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                <button onClick={() => handleStartEdit(cat)} className="text-slate-400 hover:text-blue-600" title="Edit">
+                    <Edit2 className="w-3.5 h-3.5" />
+                </button>
+                <button onClick={() => onDelete(cat.id)} className="text-slate-400 hover:text-red-600" title="Delete">
+                    <Trash2 className="w-3.5 h-3.5" />
+                </button>
+            </div>
+            </div>
+        )}
+    </li>
+  );
+
+  const incomeCategories = categories.filter(c => c.type === 'Income');
+  const expenseCategories = categories.filter(c => c.type === 'Expense');
+
   return (
      <div className="flex-1 border border-slate-100 rounded-lg overflow-hidden bg-slate-50 max-h-96 overflow-y-auto">
+        <div className="sticky top-0 z-10 bg-emerald-50 px-4 py-2 border-b border-emerald-100 font-semibold text-xs text-emerald-700 uppercase tracking-wider">
+            Income Categories
+        </div>
+        <ul className="divide-y divide-slate-100 mb-2">
+            {incomeCategories.map(renderCategoryItem)}
+            {incomeCategories.length === 0 && <li className="p-4 text-center text-slate-400 text-xs">No income categories</li>}
+        </ul>
+
+        <div className="sticky top-0 z-10 bg-red-50 px-4 py-2 border-y border-red-100 font-semibold text-xs text-red-700 uppercase tracking-wider">
+            Expense Categories
+        </div>
         <ul className="divide-y divide-slate-100">
-          {categories.map((cat) => (
-            <li key={cat.id} className="bg-white px-4 py-3 hover:bg-slate-50 group">
-               {editingItemId === cat.id ? (
-                  <div className="space-y-2">
-                    <div className="flex items-center space-x-2">
-                      <input 
-                        className="flex-1 px-2 py-1 border rounded text-base sm:text-sm bg-white text-slate-800"
-                        value={formData.name}
-                        onChange={e => setFormData({...formData, name: e.target.value})}
-                      />
-                      <button onClick={handleSave} className="text-emerald-600"><Save className="w-4 h-4" /></button>
-                      <button onClick={() => setEditingItemId(null)} className="text-slate-400"><X className="w-4 h-4" /></button>
-                    </div>
-                    <div className="flex space-x-2">
-                       <select 
-                        className="flex-1 text-xs border rounded p-1 bg-white text-slate-800"
-                        value={formData.type}
-                        onChange={e => setFormData({...formData, type: e.target.value})}
-                       >
-                         <option value="Expense">Expense</option>
-                         <option value="Income">Income</option>
-                       </select>
-                       <select 
-                        className="flex-1 text-xs border rounded p-1 bg-white text-slate-800"
-                        value={formData.group}
-                        onChange={e => setFormData({...formData, group: e.target.value})}
-                       >
-                         <option value="General">General</option>
-                         <option value="Recurring">Recurring</option>
-                       </select>
-                    </div>
-                  </div>
-               ) : (
-                 <div className="flex justify-between items-center">
-                   <div>
-                     <span className="text-sm font-medium text-slate-700 block">{cat.name}</span>
-                     <div className="flex items-center space-x-2 mt-0.5">
-                       <span className={`text-[10px] px-1.5 py-0.5 rounded ${cat.type === 'Income' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
-                         {cat.type}
-                       </span>
-                       <span className="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded">
-                         {cat.group}
-                       </span>
-                     </div>
-                   </div>
-                   <div className="flex items-center space-x-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button onClick={() => handleStartEdit(cat)} className="text-slate-400 hover:text-blue-600" title="Edit">
-                            <Edit2 className="w-3.5 h-3.5" />
-                        </button>
-                        <button onClick={() => onDelete(cat.id)} className="text-slate-400 hover:text-red-600" title="Delete">
-                           <Trash2 className="w-3.5 h-3.5" />
-                       </button>
-                   </div>
-                 </div>
-               )}
-            </li>
-          ))}
-          {categories.length === 0 && <li className="p-4 text-center text-slate-400 text-sm">No categories found</li>}
+            {expenseCategories.map(renderCategoryItem)}
+            {expenseCategories.length === 0 && <li className="p-4 text-center text-slate-400 text-xs">No expense categories</li>}
         </ul>
      </div>
   )

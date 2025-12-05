@@ -8,13 +8,14 @@ import {
   ChevronDown, ChevronUp, BarChart3, Layers, ArrowRight, Calendar, Filter, ChevronLeft, ChevronRight,
   Eye, EyeOff
 } from 'lucide-react';
-import { Transaction, FinancialSummary, Category, TransactionType } from '../types';
+import { Transaction, FinancialSummary, Category, TransactionType, Account } from '../types';
 import { formatCurrency, aggregateData, getMonthYearLabel } from '../utils/helpers';
 import { getPrivacySetting, savePrivacySetting } from '../services/db';
 
 interface DashboardProps {
   transactions: Transaction[];
   categories: Category[];
+  accounts?: Account[];
   onEdit: (t: Transaction) => void;
   onDelete: (id: string) => void;
   onNavigateToAdmin: () => void;
@@ -43,7 +44,7 @@ const StatCard: React.FC<{
   </div>
 );
 
-export const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, onEdit, onDelete, onNavigateToAdmin }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, accounts = [], onEdit, onDelete, onNavigateToAdmin }) => {
   const [showCharts, setShowCharts] = useState(false);
   const [privacyMode, setPrivacyMode] = useState(true); // Default to true (hidden)
   const [currentPage, setCurrentPage] = useState(1);
@@ -113,6 +114,22 @@ export const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, 
   
   // 'periodSummary' is used for Stats, Charts and Transaction List (filtered view)
   const periodSummary: FinancialSummary = useMemo(() => aggregateData(filteredTransactions, categories), [filteredTransactions, categories]);
+
+  // Identify savings accounts
+  const savingsAccountNames = useMemo(() => {
+    return new Set(accounts.filter(a => a.isSavings).map(a => a.name));
+  }, [accounts]);
+
+  // Calculate "Active Balance" (Total - Savings) for the Balance Card
+  const activeBalance = useMemo(() => {
+    return overallSummary.accountBalances.reduce((sum, item) => {
+      // If account is NOT a savings account, include it in the main balance
+      if (!savingsAccountNames.has(item.account)) {
+        return sum + item.balance;
+      }
+      return sum;
+    }, 0);
+  }, [overallSummary, savingsAccountNames]);
 
   // Helper to get breakdown for the detailed view
   const detailedBreakdown = useMemo(() => {
@@ -223,7 +240,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, 
         />
         <StatCard 
           title="Balance" 
-          amount={periodSummary.netSavings} 
+          amount={activeBalance} 
           icon={<DollarSign className="w-6 h-6 text-blue-600" />} 
           colorClass="bg-blue-100"
           privacyMode={privacyMode}
@@ -395,7 +412,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, 
                 <th className="px-4 sm:px-6 py-3">Description</th>
                 <th className="px-6 py-3 hidden sm:table-cell">Category</th>
                 <th className="px-4 sm:px-6 py-3 text-right">Amount</th>
-                <th className="px-6 py-3 text-right hidden lg:table-cell">Balance</th>
                 <th className="px-4 sm:px-6 py-3 text-right">Actions</th>
               </tr>
             </thead>
@@ -410,11 +426,17 @@ export const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, 
                       {t.category}
                     </span>
                   </td>
-                  <td className={`px-4 sm:px-6 py-3 text-right font-semibold whitespace-nowrap ${t.type === 'Income' ? 'text-emerald-600' : 'text-slate-800'}`}>
-                    {t.type === 'Income' ? '+' : ''}{formatCurrency(t.amount)}
-                  </td>
-                  <td className="px-6 py-3 text-right text-slate-500 font-medium whitespace-nowrap hidden lg:table-cell">
-                    {t.balanceAfterTransaction !== undefined ? formatCurrency(t.balanceAfterTransaction) : '-'}
+                  <td className="px-4 sm:px-6 py-3 text-right whitespace-nowrap">
+                    <div className="flex flex-col items-end gap-0.5">
+                      <span className={`font-semibold ${t.type === 'Income' ? 'text-emerald-600' : 'text-slate-800'}`}>
+                        {t.type === 'Income' ? '+' : ''}{formatCurrency(t.amount)}
+                      </span>
+                      {t.balanceAfterTransaction !== undefined && (
+                        <span className="text-xs text-slate-400 font-medium">
+                          {privacyMode ? '••••••' : formatCurrency(t.balanceAfterTransaction)}
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td className="px-4 sm:px-6 py-3 text-right whitespace-nowrap">
                     <div className="flex items-center justify-end space-x-2">
@@ -438,7 +460,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, 
               ))}
               {filteredTransactions.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-6 py-12 text-center text-slate-400">
+                  <td colSpan={6} className="px-6 py-12 text-center text-slate-400">
                     No transactions found for this period.
                   </td>
                 </tr>

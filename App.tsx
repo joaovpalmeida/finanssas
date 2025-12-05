@@ -8,7 +8,7 @@ import { LandingPage } from './components/LandingPage';
 import { AddTransactionModal } from './components/AddTransactionModal';
 import { TransactionSearch } from './components/TransactionSearch';
 import { parseExcelFile, ColumnMapping } from './utils/excelParser';
-import { Transaction, Account, Category } from './types';
+import { Transaction, Account, Category, TransactionType } from './types';
 import { initDB, insertTransactions, getAllTransactions, resetDB, exportDatabaseBlob, deleteTransaction, getAccounts, getCategories, importDatabase } from './services/db';
 import { calculateRunningBalances, formatCurrency, aggregateData } from './utils/helpers';
 
@@ -25,7 +25,7 @@ function App() {
   const [activeTab, setActiveTab] = useState<'landing' | 'dashboard' | 'search' | 'insights' | 'savings' | 'admin'>('landing');
   
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
+  const [editingTransaction, setEditingTransaction] = useState<Partial<Transaction> | null>(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   useEffect(() => {
@@ -73,10 +73,11 @@ function App() {
     }
   };
 
-  const handleSaveTransaction = async (transaction: Transaction) => {
-    await insertTransactions([transaction]);
+  const handleSaveTransaction = async (newTransactions: Transaction[]) => {
+    await insertTransactions(newTransactions);
     refreshTransactions();
     setEditingTransaction(null);
+    // If adding a transaction via the modal from another tab, stay there, otherwise go to dashboard
     if (activeTab === 'landing') setActiveTab('dashboard');
   };
 
@@ -280,7 +281,11 @@ function App() {
             />
           )}
           {activeTab === 'insights' && <Insights transactions={transactions} />}
-          {activeTab === 'savings' && <SavingsGoals accountBalances={accountBalances} />}
+          {activeTab === 'savings' && (
+            <SavingsGoals 
+              accountBalances={accountBalances} 
+            />
+          )}
           {activeTab === 'admin' && (
             <AdminPage 
               onBackup={handleBackup} 

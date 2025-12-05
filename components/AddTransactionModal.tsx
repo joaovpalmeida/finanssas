@@ -1,14 +1,14 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { X, Save, Calendar, Tag, CreditCard, DollarSign, Type } from 'lucide-react';
-import { Transaction, TransactionType, Category, Account, CategoryGroup } from '../types';
+import { X, Save, Calendar, Tag, CreditCard, DollarSign, Type, ArrowRightLeft, ArrowUpCircle, ArrowDownCircle, ArrowRight } from 'lucide-react';
+import { Transaction, TransactionType, Category, Account } from '../types';
 
 interface AddTransactionModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (transaction: Transaction) => void;
+  onSave: (transactions: Transaction[]) => void;
   categories: Category[];
   accounts: Account[];
-  initialData?: Transaction | null;
+  initialData?: Partial<Transaction> | null;
 }
 
 export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
@@ -19,6 +19,12 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
   accounts,
   initialData
 }) => {
+  // Transfer direction state: 'out' (default) or 'in' (only used for editing)
+  const [transferDir, setTransferDir] = useState<'in' | 'out'>('out');
+  
+  // Destination account for new transfers
+  const [toAccount, setToAccount] = useState('');
+
   const [formData, setFormData] = useState({
     date: new Date().toISOString().split('T')[0],
     description: '',
@@ -28,26 +34,38 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
     account: ''
   });
 
+  const isEditing = !!(initialData && initialData.id);
+
   useEffect(() => {
     if (isOpen) {
-      if (initialData) {
+      if (isEditing) {
+        // Editing existing transaction
+        const amt = initialData.amount || 0;
         setFormData({
-          date: new Date(initialData.date).toISOString().split('T')[0],
-          description: initialData.description,
-          amount: Math.abs(initialData.amount).toString(),
-          category: initialData.category,
-          type: initialData.type,
-          account: initialData.account
+          date: initialData.date ? new Date(initialData.date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+          description: initialData.description || '',
+          amount: Math.abs(amt).toString(),
+          category: initialData.category || '',
+          type: initialData.type || TransactionType.EXPENSE,
+          account: initialData.account || ''
         });
+        // Set transfer direction based on amount sign if it's a transfer
+        if (initialData.type === TransactionType.TRANSFER) {
+            setTransferDir(amt >= 0 ? 'in' : 'out');
+        }
+        setToAccount(''); // Not used in edit mode for single record
       } else {
+        // Brand new transaction
         setFormData({
           date: new Date().toISOString().split('T')[0],
           description: '',
           amount: '',
           category: '',
-          type: TransactionType.EXPENSE,
-          account: accounts.length > 0 ? accounts[0].name : ''
+          type: initialData?.type || TransactionType.EXPENSE,
+          account: initialData?.account || (accounts.length > 0 ? accounts[0].name : '')
         });
+        setTransferDir('out');
+        setToAccount(accounts.length > 1 ? accounts[1].name : '');
       }
     }
   }, [isOpen, initialData, accounts]);
@@ -61,27 +79,74 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    // Only amount is strictly required now
     if (!formData.amount) return;
 
-    let finalAmount = parseFloat(formData.amount);
-    if (formData.type === TransactionType.EXPENSE) {
-      finalAmount = -Math.abs(finalAmount);
+    // Calculate final date with time
+    let finalDate: string;
+    if (!isEditing) {
+        // When adding, append current time to the selected date
+        const now = new Date();
+        const [year, month, day] = formData.date.split('-').map(Number);
+        const dateObj = new Date(year, month - 1, day, now.getHours(), now.getMinutes(), now.getSeconds());
+        finalDate = dateObj.toISOString();
     } else {
-      finalAmount = Math.abs(finalAmount);
+        // When editing, strictly use the date picker value (defaults to midnight UTC for that date)
+        finalDate = new Date(formData.date).toISOString();
     }
 
-    const newTransaction: Transaction = {
-      id: initialData ? initialData.id : `manual-${Date.now()}`,
-      date: new Date(formData.date).toISOString(),
-      description: formData.description || '', // Default to empty string
-      amount: finalAmount,
-      category: formData.category || 'Uncategorized', // Default to Uncategorized
-      type: formData.type,
-      account: formData.account || 'Cash'
-    };
+    let finalAmount = parseFloat(formData.amount);
+    
+    // If adding a new Transfer, we create two transactions: one out, one in
+    if (!isEditing && formData.type === TransactionType.TRANSFER) {
+        const amount = Math.abs(finalAmount);
+        
+        // 1. Outflow from "Account" (Source)
+        const txnOut: Transaction = {
+            id: `manual-tr-out-${Date.now()}`,
+            date: finalDate,
+            description: formData.description || 'Transfer Out',
+            amount: -amount,
+            category: formData.category || 'Transfer',
+            type: TransactionType.TRANSFER,
+            account: formData.account || 'Cash'
+        };
 
-    onSave(newTransaction);
+        // 2. Inflow to "To Account" (Destination)
+        const txnIn: Transaction = {
+            id: `manual-tr-in-${Date.now()}`,
+            date: finalDate,
+            description: formData.description || 'Transfer In',
+            amount: amount,
+            category: formData.category || 'Transfer',
+            type: TransactionType.TRANSFER,
+            account: toAccount || 'Cash'
+        };
+
+        onSave([txnOut, txnIn]);
+    } else {
+        // Standard single transaction logic (Expense, Income, or Editing a Transfer leg)
+        if (formData.type === TransactionType.EXPENSE) {
+            finalAmount = -Math.abs(finalAmount);
+        } else if (formData.type === TransactionType.INCOME) {
+            finalAmount = Math.abs(finalAmount);
+        } else if (formData.type === TransactionType.TRANSFER) {
+            // Edit mode for transfer: adhere to direction toggle
+            finalAmount = transferDir === 'out' ? -Math.abs(finalAmount) : Math.abs(finalAmount);
+        }
+
+        const newTransaction: Transaction = {
+            id: (initialData && initialData.id) ? initialData.id : `manual-${Date.now()}`,
+            date: finalDate,
+            description: formData.description || '',
+            amount: finalAmount,
+            category: formData.category || 'Uncategorized',
+            type: formData.type,
+            account: formData.account || 'Cash'
+        };
+
+        onSave([newTransaction]);
+    }
+    
     onClose();
   };
 
@@ -90,7 +155,7 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden animate-fade-in">
         <div className="bg-slate-50 px-6 py-4 border-b border-slate-100 flex justify-between items-center">
           <h3 className="text-lg font-bold text-slate-800">
-            {initialData ? 'Edit Transaction' : 'Add Transaction'}
+            {isEditing ? 'Edit Transaction' : 'Add Transaction'}
           </h3>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600 transition-colors">
             <X className="w-5 h-5" />
@@ -101,21 +166,46 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
           
           {/* Type Selection */}
           <div className="flex bg-slate-100 p-1 rounded-lg">
-            {[TransactionType.EXPENSE, TransactionType.INCOME].map((type) => (
+            {[TransactionType.EXPENSE, TransactionType.INCOME, TransactionType.TRANSFER].map((type) => (
               <button
                 key={type}
                 type="button"
-                onClick={() => setFormData({ ...formData, type, category: '' })} // Reset category on type change
-                className={`flex-1 py-2 text-sm font-medium rounded-md transition-all ${
+                onClick={() => {
+                    setFormData({ ...formData, type, category: '' });
+                    if(type === TransactionType.TRANSFER) setTransferDir('out');
+                }} 
+                className={`flex-1 py-2 text-sm font-medium rounded-md transition-all flex items-center justify-center ${
                   formData.type === type 
                     ? 'bg-white text-blue-600 shadow-sm' 
                     : 'text-slate-500 hover:text-slate-700'
                 }`}
               >
+                {type === TransactionType.TRANSFER && <ArrowRightLeft className="w-3 h-3 mr-1.5" />}
                 {type}
               </button>
             ))}
           </div>
+
+          {/* Transfer Direction (Only visible for Editing Transfers) */}
+          {isEditing && formData.type === TransactionType.TRANSFER && (
+             <div className="flex items-center justify-center space-x-4 bg-slate-50 p-3 rounded-lg border border-slate-100">
+                <span className="text-xs font-semibold text-slate-500 uppercase">Direction:</span>
+                <button
+                  type="button"
+                  onClick={() => setTransferDir('out')}
+                  className={`flex items-center px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${transferDir === 'out' ? 'bg-red-100 text-red-700 border border-red-200' : 'bg-white border border-slate-200 text-slate-500 hover:bg-slate-50'}`}
+                >
+                   <ArrowUpCircle className="w-3 h-3 mr-1" /> Outflow (-)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTransferDir('in')}
+                  className={`flex items-center px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${transferDir === 'in' ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' : 'bg-white border border-slate-200 text-slate-500 hover:bg-slate-50'}`}
+                >
+                   <ArrowDownCircle className="w-3 h-3 mr-1" /> Inflow (+)
+                </button>
+             </div>
+          )}
 
           {/* Amount & Date Row */}
           <div className="grid grid-cols-2 gap-4">
@@ -149,6 +239,66 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
             </div>
           </div>
 
+          {/* Account Selection Logic */}
+          {(!isEditing && formData.type === TransactionType.TRANSFER) ? (
+             <div className="grid grid-cols-[1fr_auto_1fr] gap-2 items-end">
+                {/* From Account */}
+                <div>
+                    <label className="block text-xs font-semibold text-slate-500 mb-1">From Account</label>
+                    <input
+                        type="text"
+                        list="accounts-list"
+                        required
+                        value={formData.account}
+                        onChange={e => setFormData({ ...formData, account: e.target.value })}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white text-slate-800 text-sm"
+                        placeholder="Source"
+                    />
+                </div>
+                
+                <div className="pb-2 text-slate-400">
+                    <ArrowRight className="w-5 h-5" />
+                </div>
+
+                {/* To Account */}
+                <div>
+                    <label className="block text-xs font-semibold text-slate-500 mb-1">To Account</label>
+                    <input
+                        type="text"
+                        list="accounts-list"
+                        required
+                        value={toAccount}
+                        onChange={e => setToAccount(e.target.value)}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white text-slate-800 text-sm"
+                        placeholder="Destination"
+                    />
+                </div>
+             </div>
+          ) : (
+             /* Standard Account Field */
+             <div>
+                <label className="block text-xs font-semibold text-slate-500 mb-1">Account</label>
+                <div className="relative">
+                <CreditCard className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
+                <input
+                    type="text"
+                    list="accounts-list"
+                    required
+                    value={formData.account}
+                    onChange={e => setFormData({ ...formData, account: e.target.value })}
+                    className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white text-slate-800 text-base sm:text-sm"
+                    placeholder="Select or type new account..."
+                />
+                </div>
+             </div>
+          )}
+
+          <datalist id="accounts-list">
+            {accounts.map((acc, i) => (
+                <option key={i} value={acc.name} label={acc.isSavings ? "Savings Account" : "Regular Account"} />
+            ))}
+          </datalist>
+
           {/* Description */}
           <div>
             <label className="block text-xs font-semibold text-slate-500 mb-1">Description (Optional)</label>
@@ -159,30 +309,8 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
                 value={formData.description}
                 onChange={e => setFormData({ ...formData, description: e.target.value })}
                 className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white text-slate-800 text-base sm:text-sm"
-                placeholder="e.g. Grocery Shopping"
+                placeholder={(!isEditing && formData.type === TransactionType.TRANSFER) ? "e.g. Monthly Savings" : "e.g. Grocery Shopping"}
               />
-            </div>
-          </div>
-
-          {/* Account (Selection) */}
-          <div>
-            <label className="block text-xs font-semibold text-slate-500 mb-1">Account</label>
-            <div className="relative">
-              <CreditCard className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
-              <input
-                type="text"
-                list="accounts-list"
-                required
-                value={formData.account}
-                onChange={e => setFormData({ ...formData, account: e.target.value })}
-                className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white text-slate-800 text-base sm:text-sm"
-                placeholder="Select or type new account..."
-              />
-              <datalist id="accounts-list">
-                {accounts.map((acc, i) => (
-                  <option key={i} value={acc.name} />
-                ))}
-              </datalist>
             </div>
           </div>
 
@@ -216,7 +344,7 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
               className="w-full flex items-center justify-center py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
             >
               <Save className="w-4 h-4 mr-2" />
-              {initialData ? 'Update Transaction' : 'Save Transaction'}
+              {isEditing ? 'Update Transaction' : 'Save Transaction'}
             </button>
           </div>
         </form>
