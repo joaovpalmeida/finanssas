@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Download, Trash2, Settings, Tag, CreditCard, Edit2, Save, X, UploadCloud, AlertTriangle, Upload, Wand2, Key, PiggyBank, Plus } from 'lucide-react';
 import { SqlConsole } from './SqlConsole';
 import { FileUpload } from './FileUpload';
-import { getAccounts, getCategories, updateAccount, updateCategory, deleteCategory, deleteAccount, getTransactionCount, generateDummyData, getApiKey, saveApiKey, createAccount } from '../services/db';
+import { getAccounts, getCategories, updateAccount, updateCategory, createCategory, deleteCategory, deleteAccount, getTransactionCount, generateDummyData, getApiKey, saveApiKey, createAccount } from '../services/db';
 import { Account, Category, Transaction } from '../types';
 
 interface AdminPageProps {
@@ -101,6 +101,16 @@ export const AdminPage: React.FC<AdminPageProps> = ({
     }
   };
 
+  const handleCreateCategory = async (name: string, type: string, group: string) => {
+      if (!name.trim()) return;
+      try {
+          await createCategory(name.trim(), type, group);
+          refreshData();
+      } catch (e: any) {
+          alert("Failed to create category: " + e.message);
+      }
+  };
+
   return (
     <div className="space-y-8 animate-fade-in">
       
@@ -130,6 +140,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                 onUpload={onUpload}
                 isLoading={isUploading}
                 error={uploadError}
+                categories={categories}
               />
            </div>
         )}
@@ -297,6 +308,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
           </div>
           <CategoryList 
              categories={categories} 
+             onCreate={handleCreateCategory}
              onUpdate={async (id, neo, type, group) => { await updateCategory(id, neo, type, group); refreshData(); }}
              onDelete={async (id) => { 
                try {
@@ -433,11 +445,17 @@ const AccountList: React.FC<{
 
 const CategoryList: React.FC<{ 
   categories: Category[], 
+  onCreate: (name: string, type: string, group: string) => Promise<void>,
   onUpdate: (id: string, neo: string, type: string, group: string) => Promise<void>,
   onDelete: (id: string) => Promise<void>
-}> = ({ categories, onUpdate, onDelete }) => {
+}> = ({ categories, onCreate, onUpdate, onDelete }) => {
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [formData, setFormData] = useState({ name: '', type: 'Expense', group: 'General' });
+  
+  // New Category State
+  const [newName, setNewName] = useState('');
+  const [newType, setNewType] = useState('Expense');
+  const [newGroup, setNewGroup] = useState('General');
 
   const handleStartEdit = (cat: Category) => {
     setEditingItemId(cat.id);
@@ -449,6 +467,14 @@ const CategoryList: React.FC<{
       await onUpdate(editingItemId, formData.name, formData.type, formData.group);
     }
     setEditingItemId(null);
+  };
+
+  const handleCreate = async () => {
+      if (newName.trim()) {
+          await onCreate(newName, newType, newGroup);
+          setNewName('');
+          // Keep type/group selections for easy multi-add
+      }
   };
 
   const renderCategoryItem = (cat: Category) => (
@@ -510,22 +536,59 @@ const CategoryList: React.FC<{
   const expenseCategories = categories.filter(c => c.type === 'Expense');
 
   return (
-     <div className="flex-1 border border-slate-100 rounded-lg overflow-hidden bg-slate-50 max-h-96 overflow-y-auto">
-        <div className="sticky top-0 z-10 bg-emerald-50 px-4 py-2 border-b border-emerald-100 font-semibold text-xs text-emerald-700 uppercase tracking-wider">
-            Income Categories
+     <div className="flex-1 flex flex-col min-h-0">
+        {/* Create Form */}
+        <div className="mb-4 bg-slate-50 p-3 rounded-lg border border-slate-100">
+           <div className="flex items-center space-x-2">
+             <input 
+                className="flex-1 px-3 py-2 border rounded-lg text-sm bg-white text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                value={newName}
+                onChange={e => setNewName(e.target.value)}
+                placeholder="New category..."
+             />
+             <select 
+                className="w-24 text-xs border rounded-lg px-2 py-2 bg-white text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                value={newType}
+                onChange={e => setNewType(e.target.value)}
+             >
+                <option value="Expense">Expense</option>
+                <option value="Income">Income</option>
+             </select>
+             <select 
+                className="w-24 text-xs border rounded-lg px-2 py-2 bg-white text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                value={newGroup}
+                onChange={e => setNewGroup(e.target.value)}
+             >
+                <option value="General">General</option>
+                <option value="Recurring">Recur.</option>
+             </select>
+             <button 
+                onClick={handleCreate}
+                disabled={!newName.trim()}
+                className="p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+             >
+                <Plus className="w-5 h-5" />
+             </button>
+           </div>
         </div>
-        <ul className="divide-y divide-slate-100 mb-2">
-            {incomeCategories.map(renderCategoryItem)}
-            {incomeCategories.length === 0 && <li className="p-4 text-center text-slate-400 text-xs">No income categories</li>}
-        </ul>
 
-        <div className="sticky top-0 z-10 bg-red-50 px-4 py-2 border-y border-red-100 font-semibold text-xs text-red-700 uppercase tracking-wider">
-            Expense Categories
+        <div className="flex-1 border border-slate-100 rounded-lg overflow-hidden bg-slate-50 max-h-96 overflow-y-auto">
+            <div className="sticky top-0 z-10 bg-emerald-50 px-4 py-2 border-b border-emerald-100 font-semibold text-xs text-emerald-700 uppercase tracking-wider">
+                Income Categories
+            </div>
+            <ul className="divide-y divide-slate-100 mb-2">
+                {incomeCategories.map(renderCategoryItem)}
+                {incomeCategories.length === 0 && <li className="p-4 text-center text-slate-400 text-xs">No income categories</li>}
+            </ul>
+
+            <div className="sticky top-0 z-10 bg-red-50 px-4 py-2 border-y border-red-100 font-semibold text-xs text-red-700 uppercase tracking-wider">
+                Expense Categories
+            </div>
+            <ul className="divide-y divide-slate-100">
+                {expenseCategories.map(renderCategoryItem)}
+                {expenseCategories.length === 0 && <li className="p-4 text-center text-slate-400 text-xs">No expense categories</li>}
+            </ul>
         </div>
-        <ul className="divide-y divide-slate-100">
-            {expenseCategories.map(renderCategoryItem)}
-            {expenseCategories.length === 0 && <li className="p-4 text-center text-slate-400 text-xs">No expense categories</li>}
-        </ul>
      </div>
   )
 }

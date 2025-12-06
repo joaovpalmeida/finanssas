@@ -4,6 +4,7 @@ import { Transaction, TransactionType } from '../types';
 export interface ColumnMapping {
   date: string; // stored as stringified index "0", "1"...
   dateFormat?: string; // "DD/MM/YYYY", "MM/DD/YYYY", "YYYY-MM-DD"
+  decimalSeparator?: '.' | ','; // '.' for 1,234.56, ',' for 1.234,56
   
   // Common or default fields
   description: string;
@@ -84,7 +85,10 @@ export const getExcelColumns = (file: File, sheetName?: string): Promise<ExcelCo
     reader.onload = (e) => {
       try {
         const data = e.target?.result;
-        const workbook = XLSX.read(data, { type: 'binary' });
+        // For CSVs, we use raw: true to prevent auto-parsing of numbers/dates in headers if possible,
+        // though typically headers are strings anyway.
+        const isCSV = file.name.toLowerCase().endsWith('.csv');
+        const workbook = XLSX.read(data, { type: 'binary', raw: isCSV });
         
         const targetSheetName = sheetName || workbook.SheetNames[0];
         const sheet = workbook.Sheets[targetSheetName];
@@ -142,7 +146,12 @@ export const parseExcelFile = (
     reader.onload = (e) => {
       try {
         const data = e.target?.result;
-        const workbook = XLSX.read(data, { type: 'binary' });
+        
+        // CRITICAL: For CSV files, use raw: true.
+        // This prevents the library from guessing types and auto-parsing "38,30" as 3830 (thousands separator)
+        // or dates in US format. We want raw text so our parseNumber logic applies.
+        const isCSV = file.name.toLowerCase().endsWith('.csv');
+        const workbook = XLSX.read(data, { type: 'binary', raw: isCSV });
         
         const targetSheetName = sheetName || workbook.SheetNames[0];
         const sheet = workbook.Sheets[targetSheetName];
@@ -247,6 +256,70 @@ export const parseExcelFile = (
             return fallbackDateStr;
         };
 
+        // Helper to parse numbers based on separator settings
+        const parseNumber = (val: any): number => {
+            if (val === undefined || val === null) return NaN;
+            
+            // If already a number, return it. 
+            // Note: If XLSX mis-parsed "38,30" as 3830 (thousands sep), we are stuck with it unless we used raw: true above.
+            if (typeof val === 'number') return val;
+            
+            let str = String(val).trim();
+            if (str === '') return NaN;
+
+            // Handle parentheses for negative numbers: (123.45) -> -123.45
+            let isNegative = false;
+            if (str.startsWith('(') && str.endsWith(')')) {
+                isNegative = true;
+                str = str.slice(1, -1);
+            }
+
+            const separator = mapping?.decimalSeparator || '.';
+
+            // 1. Remove standard whitespace and non-breaking spaces
+            str = str.replace(/[\s\u00A0]/g, '');
+
+            if (separator === ',') {
+                // European: 1.234,56 -> 1234.56
+                
+                // 2. Remove dots (explicit thousands separator for this locale)
+                str = str.replace(/\./g, '');
+                
+                // 3. Remove anything that is not digit, minus, or the decimal comma
+                str = str.replace(/[^0-9,-]/g, '');
+                
+                // 4. Replace the decimal comma with a dot for JS parsing
+                str = str.replace(/,/g, '.');
+            } else {
+                // US/Standard: 1,234.56 -> 1234.56
+                
+                // HEURISTIC CHECK for "38,30" case when user forgot to switch to Comma mode:
+                // If the string contains a comma, NO dots, and looks like "digits,digits", 
+                // and especially if only 1 or 2 digits follow the comma, treat it as decimal.
+                // E.g. "38,30" -> treat as 38.30
+                // E.g. "1,234" -> treat as 1234 (standard thousands)
+                const simpleCommaDecimalMatch = str.match(/^-?\d+,(\d{1,2})$/);
+                
+                if (simpleCommaDecimalMatch) {
+                    // Treat as decimal comma despite the setting
+                    str = str.replace(/,/g, '.');
+                } else {
+                    // Standard Dot Decimal behavior
+                    // 2. Remove commas (explicit thousands separator for this locale)
+                    str = str.replace(/,/g, '');
+                    // 3. Remove anything that is NOT a digit, minus sign, or the decimal dot
+                    str = str.replace(/[^0-9.-]/g, '');
+                }
+            }
+
+            let result = parseFloat(str);
+            if (isNegative && !isNaN(result)) {
+                result = -Math.abs(result);
+            }
+            
+            return result;
+        };
+
         // Helper function to create transaction
         const createTxn = (
           row: any[], 
@@ -308,7 +381,7 @@ export const parseExcelFile = (
                     
                     const rawVal = row[incomeIndex];
                     if (rawVal !== undefined) {
-                         const val = parseFloat(String(rawVal).replace(/[^0-9.-]/g, ''));
+                         const val = parseNumber(rawVal);
                          if (!isNaN(val) && val !== 0) {
                              // Income is always positive absolute value
                              transactions.push(createTxn(
@@ -336,7 +409,7 @@ export const parseExcelFile = (
                     
                     const rawVal = row[expenseIndex];
                     if (rawVal !== undefined) {
-                         const val = parseFloat(String(rawVal).replace(/[^0-9.-]/g, ''));
+                         const val = parseNumber(rawVal);
                          if (!isNaN(val) && val !== 0) {
                              // Expense is always negative absolute value
                              transactions.push(createTxn(
@@ -368,7 +441,7 @@ export const parseExcelFile = (
                 if (!row) continue;
 
                 if (row[amountIndex] !== undefined) {
-                    const val = parseFloat(String(row[amountIndex]).replace(/[^0-9.-]/g, ''));
+                    const val = parseNumber(row[amountIndex]);
                     if (!isNaN(val) && val !== 0) {
                         const type = val >= 0 ? TransactionType.INCOME : TransactionType.EXPENSE;
                         transactions.push(createTxn(row, val, type, -1, -1, i));

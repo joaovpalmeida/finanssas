@@ -627,6 +627,24 @@ export const getCategories = (): Category[] => {
   } catch (e) { return []; }
 };
 
+export const createCategory = async (name: string, type: string, group: string) => {
+  if (!db) return;
+  try {
+    db.run("INSERT INTO categories (id, name, type, group_name) VALUES (?, ?, ?, ?)", [
+      `cat-${Date.now()}-${Math.random()}`,
+      name,
+      type,
+      group
+    ]);
+    await saveDB();
+  } catch(e: any) {
+    if(e.message && e.message.includes('UNIQUE')) {
+       throw new Error(`Category "${name}" of type "${type}" already exists.`);
+    }
+    throw e;
+  }
+};
+
 export const updateCategory = async (id: string, newName: string, newType: string, group: string) => {
   if (!db) return;
   
@@ -752,6 +770,37 @@ export const savePrivacySetting = async (isEnabled: boolean) => {
   if (!db) return;
   db.run("INSERT OR REPLACE INTO configs (key, value) VALUES ('privacy_mode', ?)", [String(isEnabled)]);
   await saveDB();
+}
+
+// --- Import Config Persistence ---
+export const saveImportConfig = async (config: { dateFormat?: string, decimalSeparator?: string }) => {
+  if (!db) return;
+  db.run("BEGIN TRANSACTION");
+  if (config.dateFormat !== undefined) {
+    db.run("INSERT OR REPLACE INTO configs (key, value) VALUES ('import_date_format', ?)", [config.dateFormat]);
+  }
+  if (config.decimalSeparator !== undefined) {
+    db.run("INSERT OR REPLACE INTO configs (key, value) VALUES ('import_decimal_separator', ?)", [config.decimalSeparator]);
+  }
+  db.run("COMMIT");
+  await saveDB();
+}
+
+export const getImportConfig = (): { dateFormat: string, decimalSeparator: string } => {
+  if (!db) return { dateFormat: '', decimalSeparator: '.' };
+  try {
+    const result = { dateFormat: '', decimalSeparator: '.' };
+    
+    const dateRes = db.exec("SELECT value FROM configs WHERE key = 'import_date_format'");
+    if (dateRes.length > 0) result.dateFormat = dateRes[0].values[0][0] as string;
+
+    const sepRes = db.exec("SELECT value FROM configs WHERE key = 'import_decimal_separator'");
+    if (sepRes.length > 0) result.decimalSeparator = sepRes[0].values[0][0] as string;
+
+    return result;
+  } catch(e) {
+    return { dateFormat: '', decimalSeparator: '.' };
+  }
 }
 
 // --- Savings Goals ---

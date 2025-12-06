@@ -1,14 +1,15 @@
 import React, { useCallback, useState, useMemo, useEffect } from 'react';
-import { Upload, FileSpreadsheet, Loader2, AlertCircle, ArrowRight, Settings, Layers, ChevronRight, ArrowLeft, Table, Calendar, Columns, ArrowDownToLine, ArrowUpFromLine, Eye, Type, Tag, CheckSquare, Square, AlertTriangle } from 'lucide-react';
+import { Upload, FileSpreadsheet, Loader2, AlertCircle, ArrowRight, Settings, Layers, ChevronRight, ArrowLeft, Table, Calendar, Columns, ArrowDownToLine, ArrowUpFromLine, Eye, Type, Tag, CheckSquare, Square, AlertTriangle, Edit2, Copy, X } from 'lucide-react';
 import { getExcelColumns, getExcelSheetNames, parseExcelFile, ColumnMapping, ExcelColumn } from '../utils/excelParser';
-import { Transaction } from '../types';
+import { Transaction, Category } from '../types';
 import { formatCurrency, generateTransactionSignature } from '../utils/helpers';
-import { getExistingSignatures } from '../services/db';
+import { getExistingSignatures, saveImportConfig, getImportConfig } from '../services/db';
 
 interface FileUploadProps {
   onUpload: (data: Transaction[]) => void;
   isLoading: boolean;
   error?: string | null;
+  categories: Category[];
 }
 
 type DuplicateStatus = 'none' | 'db' | 'file';
@@ -17,7 +18,7 @@ interface PreviewTransaction extends Transaction {
   duplicateStatus: DuplicateStatus;
 }
 
-export const FileUpload: React.FC<FileUploadProps> = ({ onUpload, isLoading, error }) => {
+export const FileUpload: React.FC<FileUploadProps> = ({ onUpload, isLoading, error, categories }) => {
   const [isDragging, setIsDragging] = useState(false);
   const [accountName, setAccountName] = useState('Main Account');
   const [defaultDate, setDefaultDate] = useState(new Date().toISOString().split('T')[0]);
@@ -34,10 +35,23 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onUpload, isLoading, err
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isParsing, setIsParsing] = useState(false);
   const [parseError, setParseError] = useState<string | null>(null);
+
+  // State for Inline Category Editing
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [tempCategory, setTempCategory] = useState('');
+
+  // State for Bulk Rename Logic
+  const [pendingBulkRename, setPendingBulkRename] = useState<{
+    oldName: string;
+    newName: string;
+    targetId: string;
+    count: number;
+  } | null>(null);
   
   const [mapping, setMapping] = useState<ColumnMapping>({
     date: '',
     dateFormat: '',
+    decimalSeparator: '.',
     description: '',
     amount: '',
     income: '',
@@ -59,6 +73,21 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onUpload, isLoading, err
     expenseEndRow: undefined
   });
 
+  // Load saved preferences on mount
+  useEffect(() => {
+    const loadPreferences = async () => {
+      const savedConfig = getImportConfig();
+      if (savedConfig) {
+        setMapping(prev => ({
+          ...prev,
+          dateFormat: savedConfig.dateFormat || prev.dateFormat,
+          decimalSeparator: (savedConfig.decimalSeparator as '.' | ',') || prev.decimalSeparator
+        }));
+      }
+    };
+    loadPreferences();
+  }, []);
+
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(true);
@@ -76,9 +105,11 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onUpload, isLoading, err
       return match ? String(match.index) : '';
     };
 
-    const mapping = {
+    const newMapping = {
       date: findIndex(/date/i),
-      dateFormat: '',
+      // Keep existing format preferences
+      dateFormat: mapping.dateFormat,
+      decimalSeparator: mapping.decimalSeparator,
       description: findIndex(/description|desc|name/i),
       amount: findIndex(/amount|value|cost/i),
       income: findIndex(/income|credit|deposit/i),
@@ -91,7 +122,8 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onUpload, isLoading, err
       incomeStartRow: 2,
       expenseStartRow: 2
     };
-    return mapping;
+    // @ts-ignore
+    return newMapping;
   };
 
   const loadSheetColumns = async (fileToLoad: File, sheetName: string) => {
@@ -114,7 +146,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onUpload, isLoading, err
     }
   };
 
-  const processFileSelection = async (selectedFile: File) => {
+  const handleFileSelect = async (selectedFile: File) => {
     try {
       const sheetNames = await getExcelSheetNames(selectedFile);
       setSheets(sheetNames);
@@ -137,13 +169,13 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onUpload, isLoading, err
     e.preventDefault();
     setIsDragging(false);
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      processFileSelection(e.dataTransfer.files[0]);
+      handleFileSelect(e.dataTransfer.files[0]);
     }
   }, []);
 
   const handleFileInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
-      processFileSelection(e.target.files[0]);
+      handleFileSelect(e.target.files[0]);
     }
   }, []);
 
@@ -201,7 +233,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onUpload, isLoading, err
     }
   };
 
-  const handleConfirmImport = () => {
+  const handleConfirmImport = async () => {
     // Only import selected transactions
     const toImport = parsedPreview
         .filter(t => selectedIds.has(t.id))
@@ -211,6 +243,12 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onUpload, isLoading, err
         alert("No transactions selected for import.");
         return;
     }
+
+    // Save user preferences for next time
+    await saveImportConfig({
+      dateFormat: mapping.dateFormat,
+      decimalSeparator: mapping.decimalSeparator
+    });
     
     onUpload(toImport);
   };
@@ -221,8 +259,13 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onUpload, isLoading, err
     setColumns([]);
     setSheets([]);
     setParsedPreview([]);
+    // Reset mapping but keep preferences
+    const savedConfig = getImportConfig();
     setMapping({ 
-      date: '', dateFormat: '', description: '', amount: '', income: '', expense: '', category: '', 
+      date: '', 
+      dateFormat: savedConfig.dateFormat || '', 
+      decimalSeparator: (savedConfig.decimalSeparator as '.' | ',') || '.', 
+      description: '', amount: '', income: '', expense: '', category: '', 
       manualDescription: '', manualCategory: '', manualIncomeCategory: '', manualExpenseCategory: '',
       startRow: 2, incomeStartRow: 2, expenseStartRow: 2 
     });
@@ -245,6 +288,61 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onUpload, isLoading, err
       } else {
           setSelectedIds(new Set());
       }
+  };
+
+  // --- Category Editing Logic ---
+
+  // Get unique categories for the datalist (Existing DB Categories + New ones from File)
+  const availableCategories = useMemo(() => {
+    const fileCats = new Set(parsedPreview.map(t => t.category));
+    const dbCats = new Set(categories.map(c => c.name));
+    // Merge both
+    const all = new Set([...fileCats, ...dbCats]);
+    return Array.from(all).sort();
+  }, [parsedPreview, categories]);
+
+  const startEditing = (t: PreviewTransaction) => {
+    setEditingId(t.id);
+    setTempCategory(t.category);
+  };
+
+  const saveEditing = (t: PreviewTransaction) => {
+    // If not editing this item or no change, cancel
+    if (editingId !== t.id) return;
+    
+    const newName = tempCategory.trim();
+    if (!newName || newName === t.category) {
+        setEditingId(null);
+        return;
+    }
+
+    // Check if other transactions in the preview share this category (to offer bulk rename)
+    const count = parsedPreview.filter(p => p.id !== t.id && p.category === t.category).length;
+    
+    if (count > 0) {
+        setPendingBulkRename({
+            oldName: t.category,
+            newName: newName,
+            targetId: t.id,
+            count
+        });
+    } else {
+        applyRename(t.id, newName, false);
+    }
+    setEditingId(null);
+  };
+
+  const applyRename = (targetId: string, newName: string, applyToAll: boolean, oldName?: string) => {
+      setParsedPreview(prev => prev.map(t => {
+          if (applyToAll && t.category === oldName) {
+              return { ...t, category: newName };
+          }
+          if (t.id === targetId) {
+              return { ...t, category: newName };
+          }
+          return t;
+      }));
+      setPendingBulkRename(null);
   };
 
   // Render Helpers
@@ -275,7 +373,6 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onUpload, isLoading, err
     </div>
   );
 
-  // New helper for Column Select OR Manual Input
   const renderColumnOrManual = (
     label: string,
     colValue: string | undefined,
@@ -340,7 +437,53 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onUpload, isLoading, err
     const duplicateCount = parsedPreview.filter(t => t.duplicateStatus !== 'none').length;
 
     return (
-      <div className="w-full max-w-4xl mx-auto p-6 bg-slate-50 rounded-xl border border-slate-200 animate-fade-in">
+      <div className="w-full max-w-4xl mx-auto p-6 bg-slate-50 rounded-xl border border-slate-200 animate-fade-in relative">
+         
+         {/* Datalist for autocomplete combining File + DB categories */}
+         <datalist id="category-options">
+            {availableCategories.map(c => (
+                <option key={c} value={c} />
+            ))}
+         </datalist>
+
+         {/* Bulk Rename Confirmation Modal */}
+         {pendingBulkRename && (
+            <div className="absolute inset-0 z-50 flex items-center justify-center bg-slate-900/50 rounded-xl backdrop-blur-sm p-4">
+                <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-sm animate-scale-in">
+                    <h4 className="text-lg font-bold text-slate-800 mb-3 flex items-center">
+                        <Copy className="w-5 h-5 mr-2 text-blue-600" />
+                        Apply to all?
+                    </h4>
+                    <p className="text-sm text-slate-600 mb-4">
+                        You renamed <strong>"{pendingBulkRename.oldName}"</strong> to <strong>"{pendingBulkRename.newName}"</strong>.
+                        <br/><br/>
+                        There are <strong>{pendingBulkRename.count}</strong> other transactions with this category.
+                        Do you want to update them all?
+                    </p>
+                    <div className="flex flex-col gap-2">
+                        <button
+                            onClick={() => applyRename(pendingBulkRename.targetId, pendingBulkRename.newName, true, pendingBulkRename.oldName)}
+                            className="w-full py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors text-sm"
+                        >
+                            Yes, Update All ({pendingBulkRename.count + 1})
+                        </button>
+                        <button
+                            onClick={() => applyRename(pendingBulkRename.targetId, pendingBulkRename.newName, false)}
+                            className="w-full py-2 bg-slate-100 text-slate-700 rounded-lg font-medium hover:bg-slate-200 transition-colors text-sm"
+                        >
+                            No, Only This One
+                        </button>
+                        <button
+                            onClick={() => setPendingBulkRename(null)}
+                            className="w-full py-2 text-slate-400 hover:text-slate-600 text-xs font-medium"
+                        >
+                            Cancel
+                        </button>
+                    </div>
+                </div>
+            </div>
+         )}
+
          <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-bold text-slate-800 flex items-center">
               <Eye className="w-5 h-5 mr-2 text-blue-600" />
@@ -405,7 +548,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onUpload, isLoading, err
                       </th>
                       <th className="px-4 py-2 whitespace-nowrap bg-slate-50">Date</th>
                       <th className="px-4 py-2 whitespace-nowrap bg-slate-50">Description</th>
-                      <th className="px-4 py-2 whitespace-nowrap bg-slate-50">Category</th>
+                      <th className="px-4 py-2 whitespace-nowrap bg-slate-50">Category (Click to Edit)</th>
                       <th className="px-4 py-2 whitespace-nowrap bg-slate-50 text-right">Amount</th>
                       <th className="px-4 py-2 whitespace-nowrap bg-slate-50">Account</th>
                     </tr>
@@ -436,8 +579,41 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onUpload, isLoading, err
                                   </span>
                               )}
                           </td>
-                          <td className="px-4 py-2 text-slate-600">
-                            <span className="px-2 py-0.5 bg-slate-100 rounded text-xs">{t.category}</span>
+                          <td className="px-4 py-2 text-slate-600" onClick={(e) => e.stopPropagation()}>
+                            {editingId === t.id ? (
+                                <div className="relative">
+                                    <input 
+                                        type="text"
+                                        autoFocus
+                                        list="category-options"
+                                        value={tempCategory}
+                                        placeholder="Select or type new..."
+                                        onChange={(e) => setTempCategory(e.target.value)}
+                                        onBlur={() => saveEditing(t)}
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter') {
+                                                e.currentTarget.blur(); // Triggers save via onBlur
+                                            }
+                                            if (e.key === 'Escape') {
+                                                setEditingId(null);
+                                            }
+                                        }}
+                                        className="w-full px-2 py-1 text-sm border border-blue-500 rounded shadow-sm focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
+                                    />
+                                </div>
+                            ) : (
+                                <div 
+                                    onClick={() => startEditing(t)}
+                                    className="group/catQl flex items-center space-x-2 cursor-pointer hover:bg-slate-100 p-1.5 -ml-1.5 rounded-md transition-colors"
+                                    role="button"
+                                    title="Click to rename"
+                                >
+                                    <span className="px-2 py-0.5 bg-slate-100 group-hover/catQl:bg-white border border-transparent group-hover/catQl:border-slate-200 rounded text-xs font-medium transition-all">
+                                        {t.category}
+                                    </span>
+                                    <Edit2 className="w-3 h-3 text-slate-300 group-hover/catQl:text-blue-500 transition-colors" />
+                                </div>
+                            )}
                           </td>
                           <td className={`px-4 py-2 text-right font-medium ${t.type === 'Income' ? 'text-emerald-600' : 'text-slate-800'}`}>
                             {t.type === 'Income' ? '+' : ''}{formatCurrency(t.amount)}
@@ -575,6 +751,19 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onUpload, isLoading, err
                         <option value="DD/MM/YYYY">DD/MM/YYYY (Day First)</option>
                         <option value="MM/DD/YYYY">MM/DD/YYYY (Month First)</option>
                         <option value="YYYY-MM-DD">YYYY-MM-DD (ISO)</option>
+                    </select>
+                </div>
+
+                {/* Number Format Selector */}
+                <div>
+                    <label className="block text-xs font-semibold text-slate-500 mb-1">Number Format</label>
+                    <select
+                        value={mapping.decimalSeparator || '.'}
+                        onChange={(e) => setMapping({...mapping, decimalSeparator: e.target.value as '.' | ','})}
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white text-base sm:text-sm"
+                    >
+                        <option value=".">1,234.56 (Dot Decimal)</option>
+                        <option value=",">1.234,56 (Comma Decimal)</option>
                     </select>
                 </div>
 
