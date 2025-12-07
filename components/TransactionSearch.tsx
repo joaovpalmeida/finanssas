@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Search, Filter, X, Calendar, Tag, CreditCard, ArrowDown, ArrowUp, Loader2, Edit2, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Transaction, Category, Account, SearchFilters, TransactionType } from '../types';
 import { searchTransactions } from '../services/db';
-import { formatCurrency } from '../utils/helpers';
+import { formatCurrency, formatDate } from '../utils/helpers';
 
 interface TransactionSearchProps {
   categories: Category[];
@@ -10,9 +10,17 @@ interface TransactionSearchProps {
   onEdit: (t: Transaction) => void;
   onDelete: (id: string) => void;
   decimalSeparator: '.' | ',';
+  dateFormat: string;
 }
 
-export const TransactionSearch: React.FC<TransactionSearchProps> = ({ categories, accounts, onEdit, onDelete, decimalSeparator }) => {
+export const TransactionSearch: React.FC<TransactionSearchProps> = ({ 
+  categories, 
+  accounts, 
+  onEdit, 
+  onDelete, 
+  decimalSeparator,
+  dateFormat 
+}) => {
   const [results, setResults] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(false);
   
@@ -230,7 +238,7 @@ export const TransactionSearch: React.FC<TransactionSearchProps> = ({ categories
                 paginatedResults.map((t) => (
                   <tr key={t.id} className="hover:bg-slate-50 transition-colors group">
                     <td className="px-4 sm:px-6 py-3 text-slate-600 whitespace-nowrap">
-                        {new Date(t.date).toLocaleDateString()}
+                        {formatDate(t.date, dateFormat)}
                     </td>
                     <td className="px-6 py-3 text-slate-800 font-medium whitespace-nowrap hidden md:table-cell">{t.account}</td>
                     <td className="px-4 sm:px-6 py-3 text-slate-800 max-w-[120px] sm:max-w-xs truncate" title={t.description}>{t.description}</td>

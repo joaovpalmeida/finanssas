@@ -20,6 +20,7 @@ interface DashboardProps {
   onDelete: (id: string) => void;
   onNavigateToAdmin: () => void;
   decimalSeparator: '.' | ',';
+  dateFormat: string;
 }
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#6366f1', '#14b8a6'];
@@ -65,7 +66,16 @@ const StatCard: React.FC<{
   </div>
 );
 
-export const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, accounts = [], onEdit, onDelete, onNavigateToAdmin, decimalSeparator }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ 
+  transactions, 
+  categories, 
+  accounts = [], 
+  onEdit, 
+  onDelete, 
+  onNavigateToAdmin, 
+  decimalSeparator,
+  dateFormat
+}) => {
   const [showCharts, setShowCharts] = useState(false);
   const [privacyMode, setPrivacyMode] = useState(true); // Default to true (hidden)
   const [currentPage, setCurrentPage] = useState(1);
@@ -548,6 +558,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, 
             <tbody className="divide-y divide-slate-100">
               {paginatedTransactions.map((t, index) => {
                 const dateObj = new Date(t.date);
+                // Keep the header date format "Friendly" (Long) as it acts as a separator
                 const dateStr = dateObj.toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
                 
                 // Compare with previous item in the *paginated* list to determine if header is needed

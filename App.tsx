@@ -41,6 +41,7 @@ function App() {
 
   // App Settings
   const [decimalSeparator, setDecimalSeparator] = useState<'.' | ','>('.');
+  const [dateFormat, setDateFormat] = useState<string>('YYYY-MM-DD');
 
   useEffect(() => {
     const setupDB = async () => {
@@ -68,6 +69,9 @@ function App() {
     const config = getImportConfig();
     if (config.decimalSeparator === ',' || config.decimalSeparator === '.') {
         setDecimalSeparator(config.decimalSeparator);
+    }
+    if (config.dateFormat) {
+        setDateFormat(config.dateFormat);
     }
   };
 
@@ -317,6 +321,7 @@ function App() {
                 }}
                 onNavigateToAdmin={() => setActiveTab('admin')}
                 decimalSeparator={decimalSeparator}
+                dateFormat={dateFormat}
               />
             )}
             {activeTab === 'search' && (
@@ -326,6 +331,7 @@ function App() {
                 onEdit={handleEditClick}
                 onDelete={handleDeleteTransaction}
                 decimalSeparator={decimalSeparator}
+                dateFormat={dateFormat}
               />
             )}
             {activeTab === 'insights' && <Insights transactions={transactions} />}
@@ -333,6 +339,7 @@ function App() {
               <SavingsGoals 
                 accountBalances={accountBalances} 
                 decimalSeparator={decimalSeparator}
+                dateFormat={dateFormat}
               />
             )}
             {activeTab === 'admin' && (
@@ -345,6 +352,7 @@ function App() {
                 isUploading={isLoading}
                 uploadError={error}
                 decimalSeparator={decimalSeparator}
+                dateFormat={dateFormat}
               />
             )}
             {activeTab === 'help' && <HelpPage />}

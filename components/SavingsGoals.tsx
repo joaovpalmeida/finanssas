@@ -7,9 +7,14 @@ import { formatCurrency, calculateMonthsBetween, formatDate } from '../utils/hel
 interface SavingsGoalsProps {
   accountBalances: { account: string; balance: number }[];
   decimalSeparator: '.' | ',';
+  dateFormat: string;
 }
 
-export const SavingsGoals: React.FC<SavingsGoalsProps> = ({ accountBalances, decimalSeparator }) => {
+export const SavingsGoals: React.FC<SavingsGoalsProps> = ({ 
+  accountBalances, 
+  decimalSeparator,
+  dateFormat 
+}) => {
   const [goals, setGoals] = useState<SavingsGoal[]>([]);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -258,7 +263,7 @@ export const SavingsGoals: React.FC<SavingsGoalsProps> = ({ accountBalances, dec
                       <h3 className="text-lg font-bold text-slate-800">{goal.name}</h3>
                       <p className="text-xs text-slate-500 flex items-center mt-1">
                         <Calendar className="w-3 h-3 mr-1" />
-                        Target: {formatDate(goal.deadline)}
+                        Target: {formatDate(goal.deadline, dateFormat)}
                       </p>
                     </div>
                     <div className="flex space-x-2">

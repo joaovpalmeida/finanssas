@@ -10,6 +10,8 @@ interface FileUploadProps {
   isLoading: boolean;
   error?: string | null;
   categories: Category[];
+  defaultDateFormat?: string;
+  defaultDecimalSeparator?: '.' | ',';
 }
 
 type DuplicateStatus = 'none' | 'db' | 'file';
@@ -19,7 +21,14 @@ interface PreviewTransaction extends Transaction {
   isAutoCategorized?: boolean;
 }
 
-export const FileUpload: React.FC<FileUploadProps> = ({ onUpload, isLoading, error, categories }) => {
+export const FileUpload: React.FC<FileUploadProps> = ({ 
+  onUpload, 
+  isLoading, 
+  error, 
+  categories,
+  defaultDateFormat,
+  defaultDecimalSeparator 
+}) => {
   const [isDragging, setIsDragging] = useState(false);
   const [accountName, setAccountName] = useState('Main Account');
   const [defaultDate, setDefaultDate] = useState(new Date().toISOString().split('T')[0]);
@@ -51,8 +60,8 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onUpload, isLoading, err
   
   const [mapping, setMapping] = useState<ColumnMapping>({
     date: '',
-    dateFormat: '',
-    decimalSeparator: '.',
+    dateFormat: defaultDateFormat || '',
+    decimalSeparator: defaultDecimalSeparator || '.',
     description: '',
     amount: '',
     income: '',
@@ -74,20 +83,14 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onUpload, isLoading, err
     expenseEndRow: undefined
   });
 
-  // Load saved preferences on mount
+  // Update mapping defaults when props change (e.g. from Admin Page updates)
   useEffect(() => {
-    const loadPreferences = async () => {
-      const savedConfig = getImportConfig();
-      if (savedConfig) {
-        setMapping(prev => ({
+      setMapping(prev => ({
           ...prev,
-          dateFormat: savedConfig.dateFormat || prev.dateFormat,
-          decimalSeparator: (savedConfig.decimalSeparator as '.' | ',') || prev.decimalSeparator
-        }));
-      }
-    };
-    loadPreferences();
-  }, []);
+          dateFormat: defaultDateFormat || prev.dateFormat,
+          decimalSeparator: defaultDecimalSeparator || prev.decimalSeparator
+      }));
+  }, [defaultDateFormat, defaultDecimalSeparator]);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -257,11 +260,8 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onUpload, isLoading, err
         return;
     }
 
-    // Save user preferences for next time
-    await saveImportConfig({
-      dateFormat: mapping.dateFormat,
-      decimalSeparator: mapping.decimalSeparator
-    });
+    // Do NOT save user preferences for imports here. 
+    // Settings in Import UI are temporary overrides per file.
     
     onUpload(toImport);
   };
@@ -273,11 +273,10 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onUpload, isLoading, err
     setSheets([]);
     setParsedPreview([]);
     // Reset mapping but keep preferences
-    const savedConfig = getImportConfig();
     setMapping({ 
       date: '', 
-      dateFormat: savedConfig.dateFormat || '', 
-      decimalSeparator: (savedConfig.decimalSeparator as '.' | ',') || '.', 
+      dateFormat: defaultDateFormat || '', 
+      decimalSeparator: defaultDecimalSeparator || '.', 
       description: '', amount: '', income: '', expense: '', category: '', 
       manualDescription: '', manualCategory: '', manualIncomeCategory: '', manualExpenseCategory: '',
       startRow: 2, incomeStartRow: 2, expenseStartRow: 2 
@@ -625,7 +624,9 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onUpload, isLoading, err
                                         {t.category}
                                     </span>
                                     {t.isAutoCategorized && (
-                                        <Sparkles className="w-3 h-3 text-purple-400" title="Auto-suggested from history" />
+                                        <span title="Auto-suggested from history" className="flex items-center">
+                                            <Sparkles className="w-3 h-3 text-purple-400" />
+                                        </span>
                                     )}
                                     <Edit2 className="w-3 h-3 text-slate-300 group-hover/catQl:text-blue-500 transition-colors" />
                                 </div>

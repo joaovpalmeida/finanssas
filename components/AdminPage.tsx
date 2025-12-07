@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Download, Trash2, Settings, Tag, CreditCard, Edit2, Save, X, UploadCloud, AlertTriangle, Upload, Wand2, Key, PiggyBank, Plus, CalendarRange, Lock, Unlock, Hash } from 'lucide-react';
+import { Download, Trash2, Settings, Tag, CreditCard, Edit2, Save, X, UploadCloud, AlertTriangle, Upload, Wand2, Key, PiggyBank, Plus, CalendarRange, Lock, Unlock, Hash, Calendar } from 'lucide-react';
 import { SqlConsole } from './SqlConsole';
 import { FileUpload } from './FileUpload';
 import { getAccounts, getCategories, updateAccount, updateCategory, createCategory, deleteCategory, deleteAccount, getTransactionCount, generateDummyData, getApiKey, saveApiKey, createAccount, getFiscalConfig, saveFiscalConfig, isDatabaseEncrypted, setDatabasePassword, removeDatabasePassword, saveImportConfig } from '../services/db';
@@ -14,6 +14,7 @@ interface AdminPageProps {
   isUploading: boolean;
   uploadError: string | null;
   decimalSeparator: '.' | ',';
+  dateFormat: string;
 }
 
 export const AdminPage: React.FC<AdminPageProps> = ({ 
@@ -24,7 +25,8 @@ export const AdminPage: React.FC<AdminPageProps> = ({
   onRestore, 
   isUploading, 
   uploadError,
-  decimalSeparator
+  decimalSeparator,
+  dateFormat
 }) => {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -118,6 +120,15 @@ export const AdminPage: React.FC<AdminPageProps> = ({
       }
   };
 
+  const handleUpdateDateFormat = async (val: string) => {
+      try {
+          await saveImportConfig({ dateFormat: val });
+          refreshData(); // Triggers app refresh which updates global state
+      } catch (e) {
+          alert("Failed to save setting");
+      }
+  };
+
   const handleCreateAccount = async (name: string, isSavings: boolean) => {
     if (!name.trim()) return;
     try {
@@ -187,6 +198,8 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                 isLoading={isUploading}
                 error={uploadError}
                 categories={categories}
+                defaultDateFormat={dateFormat}
+                defaultDecimalSeparator={decimalSeparator}
               />
            </div>
         )}
@@ -362,10 +375,10 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                    <Hash className="w-4 h-4 mr-2 text-cyan-600" />
                    Number Format
                </h3>
-               <p className="text-sm text-cyan-700/80 mb-4 flex-grow">
-                   Choose how currency amounts are displayed and entered across the app.
+               <p className="text-sm text-cyan-700/80 mb-4">
+                   Choose how currency amounts are displayed and entered.
                </p>
-               <div className="flex gap-4">
+               <div className="flex gap-4 mb-4">
                    <label className="flex items-center space-x-2 cursor-pointer flex-1 p-3 bg-white border rounded-lg hover:border-cyan-400 transition-colors">
                        <input 
                            type="radio" 
@@ -377,7 +390,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                        />
                        <div>
                            <div className="font-bold text-slate-800">1,234.56</div>
-                           <div className="text-xs text-slate-500">Dot Decimal (US/UK)</div>
+                           <div className="text-xs text-slate-500">Dot Decimal</div>
                        </div>
                    </label>
                    <label className="flex items-center space-x-2 cursor-pointer flex-1 p-3 bg-white border rounded-lg hover:border-cyan-400 transition-colors">
@@ -391,9 +404,35 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                        />
                        <div>
                            <div className="font-bold text-slate-800">1.234,56</div>
-                           <div className="text-xs text-slate-500">Comma Decimal (EU)</div>
+                           <div className="text-xs text-slate-500">Comma Decimal</div>
                        </div>
                    </label>
+               </div>
+           </div>
+
+           {/* Date Formatting Config */}
+           <div className="p-5 border border-blue-200 rounded-xl bg-blue-50/50 hover:border-blue-300 transition-all col-span-1 md:col-span-2 lg:col-span-2 flex flex-col">
+               <h3 className="font-semibold text-blue-800 flex items-center mb-3">
+                   <Calendar className="w-4 h-4 mr-2 text-blue-600" />
+                   Date Format
+               </h3>
+               <p className="text-sm text-blue-700/80 mb-4">
+                   System-wide date display format.
+               </p>
+               <div className="space-y-2">
+                   {['DD/MM/YYYY', 'MM/DD/YYYY', 'YYYY-MM-DD'].map(fmt => (
+                       <label key={fmt} className="flex items-center space-x-2 cursor-pointer p-2 bg-white border rounded-lg hover:border-blue-400 transition-colors">
+                           <input 
+                               type="radio" 
+                               name="dateFmt"
+                               checked={dateFormat === fmt}
+                               onChange={() => handleUpdateDateFormat(fmt)}
+                               className="w-4 h-4 text-blue-600 focus:ring-blue-500"
+                               style={{ colorScheme: 'light' }}
+                           />
+                           <span className="text-sm font-medium text-slate-700">{fmt}</span>
+                       </label>
+                   ))}
                </div>
            </div>
 

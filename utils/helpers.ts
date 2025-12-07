@@ -27,9 +27,25 @@ export const parseAmountInput = (value: string, decimalSeparator: '.' | ','): nu
   return parseFloat(str);
 };
 
-export const formatDate = (dateString: string): string => {
-  const options: Intl.DateTimeFormatOptions = { year: 'numeric', month: 'short', day: 'numeric' };
-  return new Date(dateString).toLocaleDateString('en-GB', options);
+export const formatDate = (dateString: string, format: string = 'YYYY-MM-DD'): string => {
+  const date = new Date(dateString);
+  if (isNaN(date.getTime())) return dateString;
+
+  const d = date.getDate();
+  const m = date.getMonth() + 1;
+  const y = date.getFullYear();
+
+  const dd = d < 10 ? `0${d}` : `${d}`;
+  const mm = m < 10 ? `0${m}` : `${m}`;
+
+  switch (format) {
+    case 'DD/MM/YYYY': return `${dd}/${mm}/${y}`;
+    case 'MM/DD/YYYY': return `${mm}/${dd}/${y}`;
+    case 'YYYY-MM-DD': return `${y}-${mm}-${dd}`;
+    default: 
+      // Fallback
+      return `${y}-${mm}-${dd}`;
+  }
 };
 
 export const getMonthYearLabel = (dateKey: string): string => {
