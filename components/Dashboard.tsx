@@ -204,6 +204,11 @@ export const Dashboard: React.FC<DashboardProps> = ({
     
     // Sum of all transactions linked to savings accounts in the current period
     const savingsFlow = filteredTransactions.reduce((sum, t) => {
+      // Exclude Balance type transactions (initial balances, adjustments) from savings rate
+      if (t.type === TransactionType.BALANCE) {
+        return sum;
+      }
+
       if (savingsAccountNames.has(t.account)) {
         // We only care about positive flow into savings (e.g. transfers in or income)
         // If we want net flow (in minus out), just sum t.amount.
