@@ -1,4 +1,4 @@
-import { Transaction, TransactionType, SavingsGoal, Category, Account, CategoryGroup, SearchFilters } from '../types';
+import { Transaction, TransactionType, SavingsGoal, Category, Account, CategoryGroup, SearchFilters, FiscalConfig } from '../types';
 import { generateTransactionSignature } from '../utils/helpers';
 
 let db: any = null;
@@ -671,6 +671,23 @@ export const getImportConfig = (): { dateFormat: string, decimalSeparator: strin
 
     return result;
   } catch(e) { return { dateFormat: '', decimalSeparator: '.' }; }
+}
+
+export const getFiscalConfig = (): FiscalConfig => {
+  if (!db) return { mode: 'calendar' };
+  try {
+    const res = db.exec("SELECT value FROM configs WHERE key = 'fiscal_month_config'");
+    if (res.length > 0) {
+      return JSON.parse(res[0].values[0][0] as string);
+    }
+    return { mode: 'calendar' };
+  } catch(e) { return { mode: 'calendar' }; }
+}
+
+export const saveFiscalConfig = async (config: FiscalConfig) => {
+  if (!db) return;
+  db.run("INSERT OR REPLACE INTO configs (key, value) VALUES ('fiscal_month_config', ?)", [JSON.stringify(config)]);
+  await saveDB();
 }
 
 // --- Savings Goals ---

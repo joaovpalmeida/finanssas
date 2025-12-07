@@ -72,3 +72,9 @@ export interface SearchFilters {
   minAmount?: string;
   maxAmount?: string;
 }
+
+export interface FiscalConfig {
+  mode: 'calendar' | 'fixed_day' | 'income_trigger';
+  startDay?: number; // 1-31, used if mode is 'fixed_day'
+  triggerCategory?: string; // category ID or Name, used if mode is 'income_trigger'
+}

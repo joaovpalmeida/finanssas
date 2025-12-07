@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Download, Trash2, Settings, Tag, CreditCard, Edit2, Save, X, UploadCloud, AlertTriangle, Upload, Wand2, Key, PiggyBank, Plus } from 'lucide-react';
+import { Download,Hb, Trash2, Settings, Tag, CreditCard, Edit2, Save, X, UploadCloud, AlertTriangle, Upload, Wand2, Key, PiggyBank, Plus, CalendarRange } from 'lucide-react';
 import { SqlConsole } from './SqlConsole';
 import { FileUpload } from './FileUpload';
-import { getAccounts, getCategories, updateAccount, updateCategory, createCategory, deleteCategory, deleteAccount, getTransactionCount, generateDummyData, getApiKey, saveApiKey, createAccount } from '../services/db';
-import { Account, Category, Transaction } from '../types';
+import { getAccounts, getCategories, updateAccount, updateCategory, createCategory, deleteCategory, deleteAccount, getTransactionCount, generateDummyData, getApiKey, saveApiKey, createAccount, getFiscalConfig, saveFiscalConfig } from '../services/db';
+import { Account, Category, Transaction, FiscalConfig } from '../types';
 
 interface AdminPageProps {
   onBackup: () => void;
@@ -34,12 +34,16 @@ export const AdminPage: React.FC<AdminPageProps> = ({
   const [apiKey, setApiKey] = useState('');
   const [isKeySaved, setIsKeySaved] = useState(false);
 
+  // Fiscal Config State
+  const [fiscalConfig, setFiscalConfig] = useState<FiscalConfig>({ mode: 'calendar' });
+
   const restoreInputRef = useRef<HTMLInputElement>(null);
 
   const refreshData = () => {
     setAccounts(getAccounts());
     setCategories(getCategories());
     setDbCount(getTransactionCount());
+    setFiscalConfig(getFiscalConfig());
     
     const key = getApiKey();
     if (key) {
@@ -89,6 +93,15 @@ export const AdminPage: React.FC<AdminPageProps> = ({
         console.error(e);
         alert("Failed to save API Key");
     }
+  };
+
+  const handleSaveFiscalConfig = async () => {
+      try {
+          await saveFiscalConfig(fiscalConfig);
+          alert("Fiscal period configuration saved.");
+      } catch (e) {
+          alert("Failed to save config.");
+      }
   };
 
   const handleCreateAccount = async (name: string, isSavings: boolean) => {
@@ -161,7 +174,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           
            {/* API Key Config */}
-           <div className="p-5 border border-purple-200 rounded-xl bg-purple-50/50 hover:border-purple-300 transition-all col-span-1 md:col-span-2 lg:col-span-4 flex flex-col h-full">
+           <div className="p-5 border border-purple-200 rounded-xl bg-purple-50/50 hover:border-purple-300 transition-all col-span-1 md:col-span-2 lg:col-span-4 flex flex-col">
                 <div className="max-w-3xl">
                   <h3 className="font-semibold text-purple-800 flex items-center mb-2">
                     <Key className="w-4 h-4 mr-2 text-purple-600" />
@@ -192,6 +205,85 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                       </p>
                   )}
                 </div>
+           </div>
+           
+           {/* Fiscal Period Config */}
+           <div className="p-5 border border-orange-200 rounded-xl bg-orange-50/50 hover:border-orange-300 transition-all col-span-1 md:col-span-2 lg:col-span-4 flex flex-col">
+               <h3 className="font-semibold text-orange-800 flex items-center mb-3">
+                   <CalendarRange className="w-4 h-4 mr-2 text-orange-600" />
+                   Fiscal Period Settings
+               </h3>
+               <div className="flex flex-col md:flex-row gap-6">
+                   <div className="flex-1 space-y-3">
+                       <label className="flex items-center space-x-2 cursor-pointer">
+                           <input 
+                               type="radio" 
+                               name="fiscalMode"
+                               checked={fiscalConfig.mode === 'calendar'}
+                               onChange={() => setFiscalConfig({ ...fiscalConfig, mode: 'calendar' })}
+                               className="text-orange-600 focus:ring-orange-500"
+                           />
+                           <span className="text-sm text-slate-700">Calendar Month (Default, 1st - 31st)</span>
+                       </label>
+                       
+                       <label className="flex items-center space-x-2 cursor-pointer">
+                           <input 
+                               type="radio" 
+                               name="fiscalMode"
+                               checked={fiscalConfig.mode === 'fixed_day'}
+                               onChange={() => setFiscalConfig({ ...fiscalConfig, mode: 'fixed_day', startDay: fiscalConfig.startDay || 25 })}
+                               className="text-orange-600 focus:ring-orange-500"
+                           />
+                           <span className="text-sm text-slate-700">Specific Start Day</span>
+                       </label>
+                       {fiscalConfig.mode === 'fixed_day' && (
+                           <div className="ml-6">
+                               <input 
+                                   type="number" 
+                                   min="1" max="31"
+                                   value={fiscalConfig.startDay || ''}
+                                   onChange={(e) => setFiscalConfig({ ...fiscalConfig, startDay: parseInt(e.target.value) })}
+                                   className="w-20 px-2 py-1 text-sm border border-orange-200 rounded"
+                                   placeholder="Day"
+                               />
+                               <span className="text-xs text-slate-500 ml-2">of every month</span>
+                           </div>
+                       )}
+
+                       <label className="flex items-center space-x-2 cursor-pointer">
+                           <input 
+                               type="radio" 
+                               name="fiscalMode"
+                               checked={fiscalConfig.mode === 'income_trigger'}
+                               onChange={() => setFiscalConfig({ ...fiscalConfig, mode: 'income_trigger' })}
+                               className="text-orange-600 focus:ring-orange-500"
+                           />
+                           <span className="text-sm text-slate-700">Transaction Trigger (e.g. Salary)</span>
+                       </label>
+                       {fiscalConfig.mode === 'income_trigger' && (
+                           <div className="ml-6">
+                               <select
+                                   value={fiscalConfig.triggerCategory || ''}
+                                   onChange={(e) => setFiscalConfig({ ...fiscalConfig,QH: e.target.value, triggerCategory: e.target.value })}
+                                   className="w-full max-w-xs px-2 py-1 text-sm border border-orange-200 rounded bg-white"
+                               >
+                                   <option value="">Select Category...</option>
+                                   {categories.filter(c => c.type === 'Income').map(c => (
+                                       <option key={c.id} value={c.name}>{c.name}</option>
+                                   ))}
+                               </select>
+                           </div>
+                       )}
+                   </div>
+                   <div className="flex items-end">
+                       <button 
+                           onClick={handleSaveFiscalConfig}
+                           className="px-4 py-2 bg-orange-600 text-white rounded-lg text-sm font-medium hover:bg-orange-700 transition-colors shadow-sm"
+                       >
+                           Save Configuration
+                       </button>
+                   </div>
+               </div>
            </div>
 
           {/* Generate Dummy Data */}
