@@ -136,10 +136,55 @@ const initSchema = () => {
 };
 
 const migrateSchema = () => {
-  // Complex migration logic omitted for this prototype phase.
-  // In a real app, we would check user_version pragma and migrate data from names to IDs.
-  // For now, we ensure tables exist.
+  if (!db) return;
+  
+  // 1. Ensure basic tables exist
   initSchema();
+
+  try {
+    // 2. Check schema evolution for 'transactions' table
+    const res = db.exec("PRAGMA table_info(transactions)");
+    if (res.length > 0) {
+      const columns = res[0].values.map((row: any[]) => row[1]);
+      
+      if (!columns.includes('category_id')) {
+        console.log("Migrating schema: Adding category_id to transactions");
+        // SQLite supports ADD COLUMN
+        db.run("ALTER TABLE transactions ADD COLUMN category_id TEXT");
+      }
+      
+      if (!columns.includes('account_id')) {
+        console.log("Migrating schema: Adding account_id to transactions");
+        db.run("ALTER TABLE transactions ADD COLUMN account_id TEXT");
+      }
+
+      // Check for potential data migration from old text columns to IDs
+      // This helps if the user had an old version where 'category' and 'account' were simple text columns
+      if (columns.includes('category') && columns.includes('category_id')) {
+         // Attempt to link existing text categories to category IDs
+         // We first need to ensure the categories exist in the categories table
+         // Since we can't do complex INSERT SELECT logic easily across these in one go without potential duplicates/errors in simple SQLite mode,
+         // We will just try to update the IDs for names that DO exist.
+         db.run(`
+            UPDATE transactions 
+            SET category_id = (SELECT id FROM categories WHERE categories.name = transactions.category)
+            WHERE category_id IS NULL AND category IS NOT NULL
+         `);
+      }
+
+      if (columns.includes('account') && columns.includes('account_id')) {
+         db.run(`
+            UPDATE transactions 
+            SET account_id = (SELECT id FROM accounts WHERE accounts.name = transactions.account)
+            WHERE account_id IS NULL AND account IS NOT NULL
+         `);
+      }
+    }
+    
+    saveDB();
+  } catch (e) {
+    console.error("Migration failed", e);
+  }
 };
 
 export const saveDB = async () => {
