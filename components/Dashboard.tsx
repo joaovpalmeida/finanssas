@@ -156,6 +156,11 @@ export const Dashboard: React.FC<DashboardProps> = ({
     });
   }, [transactions, dateStart, dateEnd]);
 
+  // Exclude Balance transactions for stats/charts to avoid skewing income/expense/savings rate
+  const statsTransactions = useMemo(() => {
+      return filteredTransactions.filter(t => t.type !== TransactionType.BALANCE);
+  }, [filteredTransactions]);
+
   // 4. Filter for Balances (Cumulative Stock)
   // Balances include everything UP TO the end date.
   const cumulativeTransactions = useMemo(() => {
@@ -174,7 +179,9 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
   // 5. Compute Aggregates
   const balanceSummary: FinancialSummary = useMemo(() => aggregateData(cumulativeTransactions, categories), [cumulativeTransactions, categories]);
-  const periodSummary: FinancialSummary = useMemo(() => aggregateData(filteredTransactions, categories), [filteredTransactions, categories]);
+  
+  // Use statsTransactions for periodSummary so Balance tx don't affect Income/Expense/Charts
+  const periodSummary: FinancialSummary = useMemo(() => aggregateData(statsTransactions, categories), [statsTransactions, categories]);
 
   // Identify savings accounts
   const savingsAccountNames = useMemo(() => {
@@ -203,12 +210,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
     if (periodSummary.totalIncome === 0) return 0;
     
     // Sum of all transactions linked to savings accounts in the current period
-    const savingsFlow = filteredTransactions.reduce((sum, t) => {
-      // Exclude Balance type transactions (initial balances, adjustments) from savings rate
-      if (t.type === TransactionType.BALANCE) {
-        return sum;
-      }
-
+    // statsTransactions already excludes BALANCE type
+    const savingsFlow = statsTransactions.reduce((sum, t) => {
       if (savingsAccountNames.has(t.account)) {
         // We only care about positive flow into savings (e.g. transfers in or income)
         // If we want net flow (in minus out), just sum t.amount.
@@ -223,13 +226,13 @@ export const Dashboard: React.FC<DashboardProps> = ({
     const netSavings = Math.max(0, savingsFlow);
 
     return (netSavings / periodSummary.totalIncome) * 100;
-  }, [periodSummary, filteredTransactions, savingsAccountNames]);
+  }, [periodSummary, statsTransactions, savingsAccountNames]);
 
   // Helper to get breakdown for the detailed view
   const detailedBreakdown = useMemo(() => {
     const groups: Record<string, { total: number, categories: Record<string, number> }> = {};
     
-    filteredTransactions.filter(t => t.type === TransactionType.EXPENSE).forEach(t => {
+    statsTransactions.filter(t => t.type === TransactionType.EXPENSE).forEach(t => {
        const catDef = categories.find(c => c.name === t.category);
        const groupName = catDef?.group || 'General';
        
@@ -243,7 +246,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
     });
 
     return Object.entries(groups).sort((a, b) => b[1].total - a[1].total);
-  }, [filteredTransactions, categories]);
+  }, [statsTransactions, categories]);
 
   // Calculate Structure Data
   const structureData = useMemo(() => {
