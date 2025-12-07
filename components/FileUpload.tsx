@@ -406,7 +406,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onUpload, isLoading, err
              value={manualValue || ''}
              onChange={(e) => onManualChange(e.target.value)}
              placeholder={`Or enter static value: ${placeholder}`}
-             className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-1 focus:ring-blue-500 bg-slate-50 text-slate-700 text-base sm:text-sm"
+             className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white text-slate-700 text-base sm:text-sm"
            />
         )}
       </div>

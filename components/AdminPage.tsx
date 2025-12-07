@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Download,Hb, Trash2, Settings, Tag, CreditCard, Edit2, Save, X, UploadCloud, AlertTriangle, Upload, Wand2, Key, PiggyBank, Plus, CalendarRange } from 'lucide-react';
+import { Download, Trash2, Settings, Tag, CreditCard, Edit2, Save, X, UploadCloud, AlertTriangle, Upload, Wand2, Key, PiggyBank, Plus, CalendarRange } from 'lucide-react';
 import { SqlConsole } from './SqlConsole';
 import { FileUpload } from './FileUpload';
 import { getAccounts, getCategories, updateAccount, updateCategory, createCategory, deleteCategory, deleteAccount, getTransactionCount, generateDummyData, getApiKey, saveApiKey, createAccount, getFiscalConfig, saveFiscalConfig } from '../services/db';
@@ -221,7 +221,8 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                                name="fiscalMode"
                                checked={fiscalConfig.mode === 'calendar'}
                                onChange={() => setFiscalConfig({ ...fiscalConfig, mode: 'calendar' })}
-                               className="text-orange-600 focus:ring-orange-500"
+                               className="w-4 h-4 text-orange-600 focus:ring-orange-500 bg-white border-gray-300"
+                               style={{ colorScheme: 'light' }}
                            />
                            <span className="text-sm text-slate-700">Calendar Month (Default, 1st - 31st)</span>
                        </label>
@@ -232,7 +233,8 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                                name="fiscalMode"
                                checked={fiscalConfig.mode === 'fixed_day'}
                                onChange={() => setFiscalConfig({ ...fiscalConfig, mode: 'fixed_day', startDay: fiscalConfig.startDay || 25 })}
-                               className="text-orange-600 focus:ring-orange-500"
+                               className="w-4 h-4 text-orange-600 focus:ring-orange-500 bg-white border-gray-300"
+                               style={{ colorScheme: 'light' }}
                            />
                            <span className="text-sm text-slate-700">Specific Start Day</span>
                        </label>
@@ -243,7 +245,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                                    min="1" max="31"
                                    value={fiscalConfig.startDay || ''}
                                    onChange={(e) => setFiscalConfig({ ...fiscalConfig, startDay: parseInt(e.target.value) })}
-                                   className="w-20 px-2 py-1 text-sm border border-orange-200 rounded"
+                                   className="w-20 px-2 py-1 text-sm border border-orange-200 rounded bg-white"
                                    placeholder="Day"
                                />
                                <span className="text-xs text-slate-500 ml-2">of every month</span>
@@ -256,7 +258,8 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                                name="fiscalMode"
                                checked={fiscalConfig.mode === 'income_trigger'}
                                onChange={() => setFiscalConfig({ ...fiscalConfig, mode: 'income_trigger' })}
-                               className="text-orange-600 focus:ring-orange-500"
+                               className="w-4 h-4 text-orange-600 focus:ring-orange-500 bg-white border-gray-300"
+                               style={{ colorScheme: 'light' }}
                            />
                            <span className="text-sm text-slate-700">Transaction Trigger (e.g. Salary)</span>
                        </label>
@@ -264,7 +267,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                            <div className="ml-6">
                                <select
                                    value={fiscalConfig.triggerCategory || ''}
-                                   onChange={(e) => setFiscalConfig({ ...fiscalConfig,QH: e.target.value, triggerCategory: e.target.value })}
+                                   onChange={(e) => setFiscalConfig({ ...fiscalConfig, triggerCategory: e.target.value })}
                                    className="w-full max-w-xs px-2 py-1 text-sm border border-orange-200 rounded bg-white"
                                >
                                    <option value="">Select Category...</option>

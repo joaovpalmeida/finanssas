@@ -110,7 +110,7 @@ export const Insights: React.FC<InsightsProps> = ({ transactions }) => {
             value={chatQuery}
             onChange={(e) => setChatQuery(e.target.value)}
             placeholder="Ask a question..."
-            className="w-full pl-4 pr-12 py-3 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-base sm:text-sm"
+            className="w-full pl-4 pr-12 py-3 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-base sm:text-sm"
           />
           <button 
             type="submit" 
