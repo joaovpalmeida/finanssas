@@ -313,6 +313,7 @@ export const generateDummyData = async () => {
   // Manually update groups/savings flag for dummy data
   db.run("BEGIN TRANSACTION");
   categories.forEach(c => {
+    // Only update if it exists (insertTransactions should have created them)
     db.run("UPDATE categories SET group_name = ? WHERE name = ? AND type = ?", [c.group, c.name, c.type]);
   });
   db.run("UPDATE accounts SET is_savings = 1 WHERE name = 'Savings'");
@@ -328,46 +329,89 @@ export const insertTransactions = async (transactions: Transaction[]) => {
   db.run("BEGIN TRANSACTION");
   
   try {
+    // 1. Resolve Accounts (Pre-processing to avoid loop lookups)
+    const accountMap = new Map<string, string>(); // Name -> ID
+    const uniqueAccounts = new Set<string>();
+    
+    transactions.forEach(t => {
+        // Collect names if no ID is present
+        if (t.account && !t.accountId) uniqueAccounts.add(t.account);
+    });
+
+    for (const name of uniqueAccounts) {
+        const res = db.exec("SELECT id FROM accounts WHERE name = ?", [name]);
+        if (res.length > 0) {
+            accountMap.set(name, res[0].values[0][0] as string);
+        } else {
+            const newId = `acc-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+            db.run("INSERT INTO accounts (id, name, is_savings) VALUES (?, ?, 0)", [newId, name]);
+            accountMap.set(name, newId);
+        }
+    }
+    
+    // Ensure "Main Account" exists fallback
+    if (!accountMap.has('Main Account')) {
+         const res = db.exec("SELECT id FROM accounts WHERE name = 'Main Account'");
+         if (res.length > 0) {
+             accountMap.set('Main Account', res[0].values[0][0] as string);
+         } else {
+             const newId = `acc-default-${Date.now()}`;
+             db.run("INSERT INTO accounts (id, name, is_savings) VALUES (?, ?, 0)", [newId, 'Main Account']);
+             accountMap.set('Main Account', newId);
+         }
+    }
+
+    // 2. Resolve Categories (Pre-processing)
+    const categoryMap = new Map<string, string>(); // "Name:Type" -> ID
+    const catKeys: {name: string, type: string}[] = [];
+    
+    transactions.forEach(t => {
+        if (t.category && !t.categoryId) {
+             const type = t.type || 'Expense';
+             // Check if already processed in this batch to avoid dupes in catKeys
+             if (!catKeys.some(k => k.name === t.category && k.type === type)) {
+                 catKeys.push({ name: t.category, type });
+             }
+        }
+    });
+
+    for (const k of catKeys) {
+        const res = db.exec("SELECT id FROM categories WHERE name = ? AND type = ?", [k.name, k.type]);
+        let id;
+        if (res.length > 0) {
+            id = res[0].values[0][0] as string;
+        } else {
+            id = `cat-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+            db.run("INSERT INTO categories (id, name, type, group_name) VALUES (?, ?, ?, 'General')", [id, k.name, k.type]);
+        }
+        categoryMap.set(`${k.name}:${k.type}`, id);
+    }
+
+    // 3. Insert Transactions
     const insertTxn = db.prepare(`
       INSERT OR REPLACE INTO transactions (id, date, description, amount, category_id, account_id, type) 
       VALUES (?, ?, ?, ?, ?, ?, ?)
     `);
     
-    // Helpers to resolve names to IDs or create if missing
-    const getOrCreateAccount = (name: string): string => {
-        const res = db.exec("SELECT id FROM accounts WHERE name = ?", [name]);
-        if (res.length > 0) return res[0].values[0][0];
-        
-        const newId = `acc-${Date.now()}-${Math.random()}`;
-        db.run("INSERT INTO accounts (id, name, is_savings) VALUES (?, ?, 0)", [newId, name]);
-        return newId;
-    };
-
-    const getOrCreateCategory = (name: string, type: string): string => {
-        const res = db.exec("SELECT id FROM categories WHERE name = ? AND type = ?", [name, type]);
-        if (res.length > 0) return res[0].values[0][0];
-
-        const newId = `cat-${Date.now()}-${Math.random()}`;
-        db.run("INSERT INTO categories (id, name, type, group_name) VALUES (?, ?, ?, 'General')", [newId, name, type]);
-        return newId;
-    };
-
     for (const t of transactions) {
         let accId = t.accountId;
-        if (!accId && t.account) {
-            accId = getOrCreateAccount(t.account);
-        } else if (!accId && !t.account) {
-            accId = getOrCreateAccount('Main Account');
+        if (!accId) {
+            if (t.account) accId = accountMap.get(t.account) || '';
+            if (!accId) accId = accountMap.get('Main Account') || '';
         }
 
         let catId = t.categoryId;
         if (!catId && t.category) {
-            catId = getOrCreateCategory(t.category, t.type || 'Expense');
-        } else if (!catId && !t.category) {
-            catId = getOrCreateCategory('Uncategorized', t.type || 'Expense');
+            const type = t.type || 'Expense';
+            catId = categoryMap.get(`${t.category}:${type}`) || '';
         }
+        
+        // Handle case where catId might still be empty (Uncategorized fallback?)
+        // Schema allows NULL category_id, so empty string might need conversion to null if strict,
+        // but current schema checks are loose. We pass null if empty string to be safe for FK.
+        const finalCatId = catId || null;
 
-        insertTxn.run([t.id, t.date, t.description, t.amount, catId, accId, t.type]);
+        insertTxn.run([t.id, t.date, t.description, t.amount, finalCatId, accId, t.type]);
     }
     
     insertTxn.free();
