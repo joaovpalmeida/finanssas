@@ -8,9 +8,9 @@ import {
   ChevronDown, ChevronUp, BarChart3, Layers, ArrowRight, Calendar, Filter, ChevronLeft, ChevronRight,
   Eye, EyeOff, Info, PiggyBank, PieChart as PieIcon, Percent
 } from 'lucide-react';
-import { Transaction, FinancialSummary, Category, TransactionType, Account } from '../types';
-import { formatCurrency, aggregateData, getMonthYearLabel } from '../utils/helpers';
-import { getPrivacySetting, savePrivacySetting } from '../services/db';
+import { Transaction, FinancialSummary, Category, TransactionType, Account, FiscalConfig } from '../types';
+import { formatCurrency, aggregateData, getMonthYearLabel, getFiscalDateRange } from '../utils/helpers';
+import { getPrivacySetting, savePrivacySetting, getFiscalConfig } from '../services/db';
 
 interface DashboardProps {
   transactions: Transaction[];
@@ -63,25 +63,6 @@ const StatCard: React.FC<{
   </div>
 );
 
-// Helper to get date range from filter key
-const getDateRange = (filter: string): { start: Date | null, end: Date, label: string } => {
-  const now = new Date();
-  
-  if (filter === 'all') {
-    return { start: null, end: now, label: 'All Time' };
-  }
-  
-  // Specific Month YYYY-MM
-  const [year, month] = filter.split('-').map(Number);
-  if (!isNaN(year) && !isNaN(month)) {
-    const start = new Date(year, month - 1, 1);
-    const end = new Date(year, month, 0, 23, 59, 59, 999);
-    return { start, end, label: start.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) };
-  }
-
-  return { start: null, end: now, label: 'All Time' };
-};
-
 export const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, accounts = [], onEdit, onDelete, onNavigateToAdmin }) => {
   const [showCharts, setShowCharts] = useState(false);
   const [privacyMode, setPrivacyMode] = useState(true); // Default to true (hidden)
@@ -89,6 +70,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, 
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [allocationView, setAllocationView] = useState<'group' | 'category'>('group');
   
+  // Fiscal Config State
+  const [fiscalConfig, setFiscalConfig] = useState<FiscalConfig>({ mode: 'calendar' });
+
   // 2. Extract unique months for the dropdown history
   const availableMonths = useMemo(() => {
     const dates = new Set(transactions.map(t => {
@@ -110,10 +94,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, 
       `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`
   );
 
-  // Load privacy setting on mount
+  // Load privacy setting & fiscal config on mount
   useEffect(() => {
     const savedPrivacy = getPrivacySetting();
     setPrivacyMode(savedPrivacy);
+    
+    const config = getFiscalConfig();
+    setFiscalConfig(config);
   }, []);
 
   // Handle privacy toggle and save
@@ -128,15 +115,25 @@ export const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, 
     setCurrentPage(1);
   }, [dateFilter, transactions, itemsPerPage]);
 
-  // 1. Calculate Date Range based on filter
-  const { start: dateStart, end: dateEnd, label: dateLabel } = useMemo(() => getDateRange(dateFilter), [dateFilter]);
+  // 1. Calculate Date Range based on filter and Fiscal Config
+  // Added 'transactions' dependency to support 'income_trigger' mode which scans history
+  const { start: dateStart, end: dateEnd, label: dateLabel } = useMemo(() => {
+      return getFiscalDateRange(dateFilter, fiscalConfig, transactions);
+  }, [dateFilter, fiscalConfig, transactions]);
 
   // Determine if the view is "Current"
   const isCurrentView = useMemo(() => {
     // It's current if filter is 'all' or the current month key
     const currentMonthKey = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
-    return dateFilter === 'all' || dateFilter === currentMonthKey;
-  }, [dateFilter]);
+    if (dateFilter === 'all') return true;
+    
+    // Check if Today is inside the fiscal range of the selected filter
+    const now = new Date();
+    if (dateStart && dateEnd) {
+       return now >= dateStart && now <= dateEnd;
+    }
+    return dateFilter === currentMonthKey;
+  }, [dateFilter, dateStart, dateEnd]);
 
   // 3. Filter transactions based on selection (For Flow: Income/Expense charts)
   const filteredTransactions = useMemo(() => {
@@ -558,7 +555,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, 
                   <React.Fragment key={t.id}>
                     {showHeader && (
                       <tr className="bg-slate-50/80 border-b border-slate-100">
-                        <td colSpan={5} className="px-4 sm:px-6 py-2 text-xs font-bold text-slate-500 uppercase tracking-wider">
+                        <td colSpan={5} className="px-4 sm:px-6 py-2 text-xs font-bold text-slate-600 uppercase tracking-wider">
                           {dateStr}
                         </td>
                       </tr>

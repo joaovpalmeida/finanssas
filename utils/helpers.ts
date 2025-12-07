@@ -1,4 +1,4 @@
-import { Transaction, TransactionType, Category } from '../types';
+import { Transaction, TransactionType, Category, FiscalConfig } from '../types';
 
 export const formatCurrency = (amount: number): string => {
   return new Intl.NumberFormat('de-DE', { // Using de-DE for Euro formatting (1.234,56 €)
@@ -17,6 +17,113 @@ export const getMonthYearLabel = (dateKey: string): string => {
   const [year, month] = dateKey.split('-');
   const date = new Date(parseInt(year), parseInt(month) - 1, 1);
   return date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+};
+
+export const getFiscalDateRange = (
+  filterKey: string, 
+  config: FiscalConfig, 
+  transactions: Transaction[] = []
+): { start: Date | null, end: Date, label: string } => {
+  const now = new Date();
+
+  if (filterKey === 'all') {
+    return { start: null, end: now, label: 'All Time' };
+  }
+
+  // filterKey format: YYYY-MM
+  const [yearStr, monthStr] = filterKey.split('-');
+  const year = parseInt(yearStr);
+  const month = parseInt(monthStr); // 1-12
+
+  if (isNaN(year) || isNaN(month)) {
+     return { start: null, end: now, label: 'All Time' };
+  }
+
+  // Default Calendar Range (Fallback)
+  const calendarStart = new Date(year, month - 1, 1);
+  const calendarEnd = new Date(year, month, 0, 23, 59, 59, 999);
+  const baseLabel = calendarStart.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+
+  // 1. Income Trigger Mode
+  if (config.mode === 'income_trigger' && config.triggerCategory) {
+      // Find the start trigger in the PREVIOUS month
+      const prevMonthIdx = month - 2; // JS Date month index (0-11). For Jan (1), prev is Dec (-1, handles year wrap)
+      const prevMonthStart = new Date(year, prevMonthIdx, 1);
+      const prevMonthEnd = new Date(year, prevMonthIdx + 1, 0, 23, 59, 59, 999);
+
+      // Find the end trigger in the CURRENT month
+      const currMonthStart = new Date(year, month - 1, 1);
+      const currMonthEnd = new Date(year, month, 0, 23, 59, 59, 999);
+
+      const getTriggersInWindow = (start: Date, end: Date) => {
+          return transactions
+            .filter(t => 
+                t.category === config.triggerCategory && 
+                new Date(t.date) >= start && 
+                new Date(t.date) <= end
+            )
+            .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+      };
+
+      const startTriggers = getTriggersInWindow(prevMonthStart, prevMonthEnd);
+      const endTriggers = getTriggersInWindow(currMonthStart, currMonthEnd);
+
+      // If we found a start trigger in the previous month
+      if (startTriggers.length > 0) {
+          const startTxn = startTriggers[0]; // Assume first occurrence starts the cycle
+          const startDate = new Date(startTxn.date);
+
+          let endDate: Date;
+          // If we find a trigger in the current month, the period ends right before it
+          if (endTriggers.length > 0) {
+              const endTxn = endTriggers[0];
+              // End date is exclusive of the next transaction
+              endDate = new Date(new Date(endTxn.date).getTime() - 1);
+          } else {
+              // If no trigger found in current month yet (e.g. hasn't happened), extend to end of calendar month
+              endDate = calendarEnd;
+          }
+
+          const startFmt = startDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+          const endFmt = endDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+          
+          return { start: startDate, end: endDate, label: `${startFmt} - ${endFmt}` };
+      }
+      
+      // Fallback to calendar if no previous trigger found
+      return { start: calendarStart, end: calendarEnd, label: baseLabel };
+  }
+
+  // 2. Fixed Day Mode
+  if (config.mode === 'fixed_day' && config.startDay) {
+      const sDay = config.startDay;
+      
+      const prevMonthIdx = month - 2;
+      const currMonthIdx = month - 1;
+
+      // Start Date: Min(sDay, DaysInPrevMonth) of Previous Month
+      const maxDaysPrev = new Date(year, prevMonthIdx + 1, 0).getDate();
+      const startDayActual = Math.min(sDay, maxDaysPrev);
+      
+      const startDate = new Date(year, prevMonthIdx, startDayActual);
+      startDate.setHours(0, 0, 0, 0);
+
+      // End Date: Min(sDay, DaysInCurrMonth) of Current Month MINUS 1 day
+      const maxDaysCurr = new Date(year, currMonthIdx + 1, 0).getDate();
+      const tentativeEndDay = Math.min(sDay, maxDaysCurr);
+      
+      const endDate = new Date(year, currMonthIdx, tentativeEndDay);
+      endDate.setDate(endDate.getDate() - 1); 
+      endDate.setHours(23, 59, 59, 999);
+
+      const startFmt = startDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+      const endFmt = endDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+
+      return { start: startDate, end: endDate, label: `${startFmt} - ${endFmt}` };
+  }
+
+  // 3. Default / Calendar Mode
+  return { start: calendarStart, end: calendarEnd, label: baseLabel };
 };
 
 export const calculateMonthsBetween = (d1: Date, d2: Date): number => {
@@ -50,7 +157,14 @@ export const calculateRunningBalances = (transactions: Transaction[]): Transacti
   // 2. Process each account
   Object.values(grouped).forEach(group => {
     // Sort Ascending (Oldest first) to calculate running total
-    group.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    // Primary Sort: Date (Time included)
+    // Secondary Sort: ID (to guarantee deterministic order when times are identical)
+    group.sort((a, b) => {
+        const timeA = new Date(a.date).getTime();
+        const timeB = new Date(b.date).getTime();
+        if (timeA !== timeB) return timeA - timeB;
+        return a.id.localeCompare(b.id);
+    });
 
     let runningBalance = 0;
     group.forEach(t => {
@@ -64,7 +178,13 @@ export const calculateRunningBalances = (transactions: Transaction[]): Transacti
   });
 
   // 3. Final Sort Descending (Newest first) for UI Display
-  return result.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  // Must mirror the logic above but reversed
+  return result.sort((a, b) => {
+      const timeA = new Date(a.date).getTime();
+      const timeB = new Date(b.date).getTime();
+      if (timeA !== timeB) return timeB - timeA;
+      return b.id.localeCompare(a.id);
+  });
 };
 
 export const aggregateData = (transactions: Transaction[], categories: Category[]) => {

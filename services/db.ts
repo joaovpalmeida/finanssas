@@ -253,87 +253,93 @@ export const generateDummyData = async () => {
     // Helpers
     const randInt = (min: number, max: number) => Math.floor(Math.random() * (max - min + 1)) + min;
     
+    // Helper to generate ISO string with specific hour/minute
+    const getDateWithTime = (baseDate: Date, hour: number, min: number = 0) => {
+        const d = new Date(baseDate);
+        d.setHours(hour, min, 0, 0);
+        return d.toISOString();
+    };
+    
     let currentDate = new Date(startDate);
     
     while (currentDate <= endDate) {
-        const dateStr = currentDate.toISOString();
         const day = currentDate.getDate();
         const weekDay = currentDate.getDay(); // 0 = Sun, 6 = Sat
         const isWeekend = weekDay === 0 || weekDay === 6;
 
-        // --- Monthly Recurring ---
+        // --- Monthly Recurring (Morning) ---
         if (day === 1) {
             transactions.push({
-                date: dateStr,
+                date: getDateWithTime(currentDate, 9, 0),
                 desc: 'Monthly Rent', amount: -1200, cat: 'Rent', type: 'Expense', acc: 'Main Checking'
             });
         }
         if (day === 5) {
             transactions.push({
-                date: dateStr,
+                date: getDateWithTime(currentDate, 10, 0),
                 desc: 'Internet Bill', amount: -60, cat: 'Internet', type: 'Expense', acc: 'Main Checking'
             });
         }
         if (day === 15) {
             transactions.push({
-                date: dateStr,
+                date: getDateWithTime(currentDate, 14, 0),
                 desc: 'Electric & Water', amount: -randInt(120, 180), cat: 'Utilities', type: 'Expense', acc: 'Main Checking'
             });
         }
         if (day === 28) {
             transactions.push({
-                date: dateStr,
+                date: getDateWithTime(currentDate, 9, 0),
                 desc: 'Salary', amount: 4500, cat: 'Salary', type: 'Income', acc: 'Main Checking'
             });
             // Auto Transfer to Savings
             transactions.push({
-                date: dateStr,
+                date: getDateWithTime(currentDate, 9, 5),
                 desc: 'Savings Contribution', amount: -1000, cat: 'Transfer', type: 'Transfer', acc: 'Main Checking'
             });
             transactions.push({
-                date: dateStr,
+                date: getDateWithTime(currentDate, 9, 5), // Same time, engine will handle order or ID sort
                 desc: 'Savings Contribution', amount: 1000, cat: 'Transfer', type: 'Transfer', acc: 'Savings'
             });
         }
 
         // --- Daily/Weekly Variable ---
         
-        // Groceries (Every ~4 days)
+        // Groceries (After work hours)
         if (Math.random() > 0.75) {
              transactions.push({
-                date: dateStr,
+                date: getDateWithTime(currentDate, 17, 30),
                 desc: 'Supermarket', amount: -randInt(40, 150), cat: 'Groceries', type: 'Expense', acc: 'Main Checking'
             });
         }
 
-        // Dining Out (More on weekends)
+        // Dining Out (Dinner time)
         if ((isWeekend && Math.random() > 0.3) || (!isWeekend && Math.random() > 0.8)) {
              transactions.push({
-                date: dateStr,
+                date: getDateWithTime(currentDate, 20, 0),
                 desc: 'Restaurant / Cafe', amount: -randInt(15, 60), cat: 'Dining Out', type: 'Expense', acc: 'Credit Card'
             });
         }
 
-        // Transport
+        // Transport (Morning commute)
         if (!isWeekend && Math.random() > 0.6) {
              transactions.push({
-                date: dateStr,
+                date: getDateWithTime(currentDate, 8, 30),
                 desc: 'Uber / Public Transport', amount: -randInt(10, 30), cat: 'Transport', type: 'Expense', acc: 'Credit Card'
             });
         }
 
-        // Random Shopping
+        // Random Shopping (Afternoon)
         if (day % 10 === 0 && Math.random() > 0.5) {
              transactions.push({
-                date: dateStr,
+                date: getDateWithTime(currentDate, 15, 0),
                 desc: 'Amazon / Online Store', amount: -randInt(30, 150), cat: 'Shopping', type: 'Expense', acc: 'Credit Card'
             });
         }
 
-        // Random Freelance Income
+        // Random Freelance Income (Mid-day)
         if (day % 14 === 0 && Math.random() > 0.7) {
              transactions.push({
-                date: dateStr,
+                date: getDateWithTime(currentDate, 11, 0),
                 desc: 'Freelance Project', amount: randInt(200, 800), cat: 'Freelance', type: 'Income', acc: 'Main Checking'
             });
         }
@@ -356,7 +362,7 @@ export const generateDummyData = async () => {
         if (catId && accId) {
             stmt.run([
                 `txn-dummy-${Date.now()}-${Math.random().toString(36).substring(2, 10)}`,
-                t.date || currentDate.toISOString(), 
+                t.date, 
                 t.desc,
                 t.amount,
                 catId,
@@ -499,7 +505,7 @@ export const getAllTransactions = (): Transaction[] => {
       FROM transactions t
       LEFT JOIN categories c ON t.category_id = c.id
       LEFT JOIN accounts a ON t.account_id = a.id
-      ORDER BY t.date DESC
+      ORDER BY t.date DESC, t.id DESC
     `;
     const res = db.exec(sql);
     if (res.length === 0) return [];
@@ -579,7 +585,7 @@ export const searchTransactions = (filters: SearchFilters): Transaction[] => {
     params.push(parseFloat(filters.maxAmount));
   }
 
-  sql += " ORDER BY t.date DESC LIMIT 500";
+  sql += " ORDER BY t.date DESC, t.id DESC LIMIT 500";
 
   try {
     const stmt = db.prepare(sql);
