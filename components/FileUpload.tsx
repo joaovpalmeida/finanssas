@@ -1,9 +1,9 @@
 import React, { useCallback, useState, useMemo, useEffect } from 'react';
-import { Upload, FileSpreadsheet, Loader2, AlertCircle, ArrowRight, Settings, Layers, ChevronRight, ArrowLeft, Table, Calendar, Columns, ArrowDownToLine, ArrowUpFromLine, Eye, Type, Tag, CheckSquare, Square, AlertTriangle, Edit2, Copy, X } from 'lucide-react';
+import { Upload, FileSpreadsheet, Loader2, AlertCircle, ArrowRight, Settings, Layers, ChevronRight, ArrowLeft, Table, Calendar, Columns, ArrowDownToLine, ArrowUpFromLine, Eye, Type, Tag, CheckSquare, Square, AlertTriangle, Edit2, Copy, X, Sparkles } from 'lucide-react';
 import { getExcelColumns, getExcelSheetNames, parseExcelFile, ColumnMapping, ExcelColumn } from '../utils/excelParser';
 import { Transaction, Category } from '../types';
 import { formatCurrency, generateTransactionSignature } from '../utils/helpers';
-import { getExistingSignatures, saveImportConfig, getImportConfig } from '../services/db';
+import { getExistingSignatures, saveImportConfig, getImportConfig, getCategorySuggestions } from '../services/db';
 
 interface FileUploadProps {
   onUpload: (data: Transaction[]) => void;
@@ -16,6 +16,7 @@ type DuplicateStatus = 'none' | 'db' | 'file';
 
 interface PreviewTransaction extends Transaction {
   duplicateStatus: DuplicateStatus;
+  isAutoCategorized?: boolean;
 }
 
 export const FileUpload: React.FC<FileUploadProps> = ({ onUpload, isLoading, error, categories }) => {
@@ -196,6 +197,8 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onUpload, isLoading, err
         } else {
             // DUPLICATE DETECTION LOGIC
             const existingSignatures = getExistingSignatures();
+            const categorySuggestions = getCategorySuggestions();
+            
             const processedPreview: PreviewTransaction[] = [];
             const fileSignatures = new Set<string>();
             const initialSelection = new Set<string>();
@@ -203,6 +206,16 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onUpload, isLoading, err
             data.forEach(t => {
                 const sig = generateTransactionSignature(t);
                 let status: DuplicateStatus = 'none';
+                let autoCat = false;
+
+                // Auto-suggest category if uncategorized
+                if (t.category === 'Uncategorized') {
+                    const match = categorySuggestions[t.description.trim().toLowerCase()];
+                    if (match) {
+                        t.category = match;
+                        autoCat = true;
+                    }
+                }
 
                 // Check DB
                 if (existingSignatures.has(sig)) {
@@ -219,7 +232,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onUpload, isLoading, err
                 }
 
                 fileSignatures.add(sig);
-                processedPreview.push({ ...t, duplicateStatus: status });
+                processedPreview.push({ ...t, duplicateStatus: status, isAutoCategorized: autoCat });
             });
 
             setParsedPreview(processedPreview);
@@ -237,7 +250,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onUpload, isLoading, err
     // Only import selected transactions
     const toImport = parsedPreview
         .filter(t => selectedIds.has(t.id))
-        .map(({ duplicateStatus, ...t }) => t); // Remove internal status prop
+        .map(({ duplicateStatus, isAutoCategorized, ...t }) => t); // Remove internal status props
     
     if (toImport.length === 0) {
         alert("No transactions selected for import.");
@@ -611,6 +624,9 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onUpload, isLoading, err
                                     <span className="px-2 py-0.5 bg-slate-100 group-hover/catQl:bg-white border border-transparent group-hover/catQl:border-slate-200 rounded text-xs font-medium transition-all">
                                         {t.category}
                                     </span>
+                                    {t.isAutoCategorized && (
+                                        <Sparkles className="w-3 h-3 text-purple-400" title="Auto-suggested from history" />
+                                    )}
                                     <Edit2 className="w-3 h-3 text-slate-300 group-hover/catQl:text-blue-500 transition-colors" />
                                 </div>
                             )}

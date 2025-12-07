@@ -190,6 +190,38 @@ export const getExistingSignatures = (): Set<string> => {
   }
 };
 
+export const getCategorySuggestions = (): Record<string, string> => {
+  if (!db) return {};
+  try {
+    // Get all transactions joined with categories, ordered by date ascending.
+    // This allows iterating and updating a map so the 'latest' category for a description wins.
+    const sql = `
+      SELECT t.description, c.name 
+      FROM transactions t
+      JOIN categories c ON t.category_id = c.id
+      WHERE t.description IS NOT NULL AND t.description != ''
+      ORDER BY t.date ASC, t.id ASC
+    `;
+    const res = db.exec(sql);
+    if (res.length === 0) return {};
+
+    const map: Record<string, string> = {};
+    const values = res[0].values;
+    
+    values.forEach((row: any[]) => {
+      const desc = String(row[0] || '').trim().toLowerCase();
+      const cat = String(row[1] || '');
+      if (desc && cat) {
+        map[desc] = cat; 
+      }
+    });
+    return map;
+  } catch (e) {
+    console.error("Error fetching category suggestions", e);
+    return {};
+  }
+};
+
 export const generateDummyData = async () => {
   if (!db) return;
 
