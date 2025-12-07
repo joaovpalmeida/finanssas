@@ -6,9 +6,10 @@ import { formatCurrency, calculateMonthsBetween, formatDate } from '../utils/hel
 
 interface SavingsGoalsProps {
   accountBalances: { account: string; balance: number }[];
+  decimalSeparator: '.' | ',';
 }
 
-export const SavingsGoals: React.FC<SavingsGoalsProps> = ({ accountBalances }) => {
+export const SavingsGoals: React.FC<SavingsGoalsProps> = ({ accountBalances, decimalSeparator }) => {
   const [goals, setGoals] = useState<SavingsGoal[]>([]);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -208,7 +209,7 @@ export const SavingsGoals: React.FC<SavingsGoalsProps> = ({ accountBalances }) =
                           }
                         `}
                       >
-                        {acc.account} <span className="opacity-75 text-xs">({formatCurrency(acc.balance)})</span>
+                        {acc.account} <span className="opacity-75 text-xs">({formatCurrency(acc.balance, decimalSeparator)})</span>
                       </button>
                     )
                  })}
@@ -294,8 +295,8 @@ export const SavingsGoals: React.FC<SavingsGoalsProps> = ({ accountBalances }) =
                       ></div>
                     </div>
                     <div className="flex justify-between text-xs text-slate-400 mt-1">
-                      <span>{formatCurrency(status.currentBalance)}</span>
-                      <span>{formatCurrency(goal.targetAmount)}</span>
+                      <span>{formatCurrency(status.currentBalance, decimalSeparator)}</span>
+                      <span>{formatCurrency(goal.targetAmount, decimalSeparator)}</span>
                     </div>
                   </div>
                 </div>
@@ -317,7 +318,7 @@ export const SavingsGoals: React.FC<SavingsGoalsProps> = ({ accountBalances }) =
                             <p className="text-lg font-bold text-slate-800">
                               {status.monthsRemaining <= 0 
                                 ? 'Overdue' 
-                                : formatCurrency(status.monthlyContribution)
+                                : formatCurrency(status.monthlyContribution, decimalSeparator)
                               }
                             </p>
                             {status.monthsRemaining > 0 && (

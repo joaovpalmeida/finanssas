@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useId } from 'react';
 import { X, Save, Calendar, Tag, CreditCard, DollarSign, Type, ArrowRightLeft, ArrowUpCircle, ArrowDownCircle, ArrowRight, ChevronDown, List, Plus, Scale } from 'lucide-react';
 import { Transaction, TransactionType, Category, Account } from '../types';
+import { parseAmountInput } from '../utils/helpers';
 
 interface AddTransactionModalProps {
   isOpen: boolean;
@@ -9,6 +10,7 @@ interface AddTransactionModalProps {
   categories: Category[];
   accounts: Account[];
   initialData?: Partial<Transaction> | null;
+  decimalSeparator: '.' | ',';
 }
 
 const AccountField = ({ 
@@ -122,7 +124,8 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
   onSave,
   categories,
   accounts,
-  initialData
+  initialData,
+  decimalSeparator
 }) => {
   const [transferDir, setTransferDir] = useState<'in' | 'out'>('out');
   const [toAccountId, setToAccountId] = useState('');
@@ -141,17 +144,22 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       if (isEditing) {
-        const amt = initialData.amount || 0;
+        const amt = Math.abs(initialData.amount || 0);
+        // Format initial amount based on separator preference
+        const formattedAmt = decimalSeparator === ',' 
+            ? amt.toString().replace('.', ',') 
+            : amt.toString();
+
         setFormData({
           date: initialData.date ? new Date(initialData.date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
           description: initialData.description || '',
-          amount: Math.abs(amt).toString(),
+          amount: formattedAmt,
           categoryId: initialData.categoryId || '', // Use ID
           type: initialData.type || TransactionType.EXPENSE,
           accountId: initialData.accountId || ''    // Use ID
         });
         if (initialData.type === TransactionType.TRANSFER) {
-            setTransferDir(amt >= 0 ? 'in' : 'out');
+            setTransferDir((initialData.amount || 0) >= 0 ? 'in' : 'out');
         }
         setToAccountId(''); 
       } else {
@@ -171,7 +179,7 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
         setToAccountId(availableDest ? availableDest.id : '');
       }
     }
-  }, [isOpen, initialData, accounts]);
+  }, [isOpen, initialData, accounts, decimalSeparator]);
 
   useEffect(() => {
     if (!isEditing && formData.type === TransactionType.TRANSFER && formData.accountId === toAccountId) {
@@ -229,7 +237,7 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
         finalDate = new Date(formData.date).toISOString();
     }
 
-    let finalAmount = parseFloat(formData.amount);
+    let finalAmount = parseAmountInput(formData.amount, decimalSeparator);
     
     // Resolve Category
     const { categoryId, category } = resolveCategoryPayload(formData.categoryId);
@@ -355,13 +363,13 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
               <div className="relative">
                 <DollarSign className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
                 <input
-                  type="number"
-                  step="0.01"
+                  type="text"
+                  inputMode="decimal"
                   required
                   value={formData.amount}
                   onChange={e => setFormData({ ...formData, amount: e.target.value })}
                   className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white text-slate-800 text-base sm:text-sm"
-                  placeholder="0.00"
+                  placeholder={decimalSeparator === ',' ? "0,00" : "0.00"}
                 />
               </div>
             </div>

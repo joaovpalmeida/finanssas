@@ -9,9 +9,10 @@ interface TransactionSearchProps {
   accounts: Account[];
   onEdit: (t: Transaction) => void;
   onDelete: (id: string) => void;
+  decimalSeparator: '.' | ',';
 }
 
-export const TransactionSearch: React.FC<TransactionSearchProps> = ({ categories, accounts, onEdit, onDelete }) => {
+export const TransactionSearch: React.FC<TransactionSearchProps> = ({ categories, accounts, onEdit, onDelete, decimalSeparator }) => {
   const [results, setResults] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(false);
   
@@ -239,7 +240,7 @@ export const TransactionSearch: React.FC<TransactionSearchProps> = ({ categories
                       </span>
                     </td>
                     <td className={`px-4 sm:px-6 py-3 text-right font-semibold whitespace-nowrap ${t.type === 'Income' ? 'text-emerald-600' : 'text-slate-800'}`}>
-                      {t.type === 'Income' ? '+' : ''}{formatCurrency(t.amount)}
+                      {t.type === 'Income' ? '+' : ''}{formatCurrency(t.amount, decimalSeparator)}
                     </td>
                     <td className="px-4 sm:px-6 py-3 text-right whitespace-nowrap">
                         <div className="flex items-center justify-end space-x-2">

@@ -1,10 +1,30 @@
 import { Transaction, TransactionType, Category, FiscalConfig } from '../types';
 
-export const formatCurrency = (amount: number): string => {
-  return new Intl.NumberFormat('de-DE', { // Using de-DE for Euro formatting (1.234,56 €)
+export const formatCurrency = (amount: number, decimalSeparator: '.' | ',' = '.'): string => {
+  const locale = decimalSeparator === ',' ? 'de-DE' : 'en-US';
+  return new Intl.NumberFormat(locale, {
     style: 'currency',
     currency: 'EUR',
   }).format(amount);
+};
+
+export const parseAmountInput = (value: string, decimalSeparator: '.' | ','): number => {
+  if (!value) return 0;
+  // Remove spaces
+  let str = value.replace(/\s/g, '');
+  
+  if (decimalSeparator === ',') {
+     // Expecting 1.234,56
+     // Remove dots (thousands)
+     str = str.replace(/\./g, '');
+     // Replace comma with dot (decimal)
+     str = str.replace(/,/g, '.');
+  } else {
+     // Expecting 1,234.56
+     // Remove commas (thousands)
+     str = str.replace(/,/g, '');
+  }
+  return parseFloat(str);
 };
 
 export const formatDate = (dateString: string): string => {

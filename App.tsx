@@ -1,8 +1,7 @@
-
 import React, { useState, useEffect, useMemo, Suspense } from 'react';
 import { Wallet, Loader2, Plus, Settings, Target, Search, Home, Menu, X, BarChart3, Sparkles, HelpCircle } from 'lucide-react';
 import { Transaction, Account, Category } from './types';
-import { initDB, insertTransactions, getAllTransactions, resetDB, exportDatabaseBlob, deleteTransaction, getAccounts, getCategories, importDatabase, unlockDB, DBStatus } from './services/db';
+import { initDB, insertTransactions, getAllTransactions, resetDB, exportDatabaseBlob, deleteTransaction, getAccounts, getCategories, importDatabase, unlockDB, DBStatus, getImportConfig } from './services/db';
 import { calculateRunningBalances, aggregateData } from './utils/helpers';
 import { PasswordPrompt } from './components/PasswordPrompt';
 
@@ -40,6 +39,9 @@ function App() {
   const [editingTransaction, setEditingTransaction] = useState<Partial<Transaction> | null>(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
+  // App Settings
+  const [decimalSeparator, setDecimalSeparator] = useState<'.' | ','>('.');
+
   useEffect(() => {
     const setupDB = async () => {
       const status = await initDB();
@@ -61,6 +63,12 @@ function App() {
     // Also refresh metadata
     setAccounts(getAccounts());
     setCategories(getCategories());
+    
+    // Load config
+    const config = getImportConfig();
+    if (config.decimalSeparator === ',' || config.decimalSeparator === '.') {
+        setDecimalSeparator(config.decimalSeparator);
+    }
   };
 
   const handleUnlock = async (password: string) => {
@@ -308,6 +316,7 @@ function App() {
                     if(confirm("Are you sure?")) handleDeleteTransaction(id); 
                 }}
                 onNavigateToAdmin={() => setActiveTab('admin')}
+                decimalSeparator={decimalSeparator}
               />
             )}
             {activeTab === 'search' && (
@@ -316,12 +325,14 @@ function App() {
                 accounts={accounts} 
                 onEdit={handleEditClick}
                 onDelete={handleDeleteTransaction}
+                decimalSeparator={decimalSeparator}
               />
             )}
             {activeTab === 'insights' && <Insights transactions={transactions} />}
             {activeTab === 'savings' && (
               <SavingsGoals 
                 accountBalances={accountBalances} 
+                decimalSeparator={decimalSeparator}
               />
             )}
             {activeTab === 'admin' && (
@@ -333,6 +344,7 @@ function App() {
                 onUpload={handleFileUpload}
                 isUploading={isLoading}
                 uploadError={error}
+                decimalSeparator={decimalSeparator}
               />
             )}
             {activeTab === 'help' && <HelpPage />}
@@ -352,6 +364,7 @@ function App() {
             categories={categories}
             accounts={accounts}
             initialData={editingTransaction}
+            decimalSeparator={decimalSeparator}
           />
         )}
       </Suspense>

@@ -19,6 +19,7 @@ interface DashboardProps {
   onEdit: (t: Transaction) => void;
   onDelete: (id: string) => void;
   onNavigateToAdmin: () => void;
+  decimalSeparator: '.' | ',';
 }
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#6366f1', '#14b8a6'];
@@ -39,7 +40,8 @@ const StatCard: React.FC<{
   privacyMode: boolean;
   tooltip?: string;
   isPercentage?: boolean;
-}> = ({ title, amount, icon, colorClass, privacyMode, tooltip, isPercentage }) => (
+  decimalSeparator: '.' | ',';
+}> = ({ title, amount, icon, colorClass, privacyMode, tooltip, isPercentage, decimalSeparator }) => (
   <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 flex items-center justify-between group relative">
     <div>
       <div className="flex items-center space-x-1 mb-1">
@@ -54,7 +56,7 @@ const StatCard: React.FC<{
         )}
       </div>
       <h3 className="text-2xl font-bold text-slate-800">
-        {privacyMode ? '••••••' : (isPercentage ? `${amount.toFixed(1)}%` : formatCurrency(amount))}
+        {privacyMode ? '••••••' : (isPercentage ? `${amount.toFixed(1)}%` : formatCurrency(amount, decimalSeparator))}
       </h3>
     </div>
     <div className={`p-3 rounded-full ${colorClass} bg-opacity-10`}>
@@ -63,7 +65,7 @@ const StatCard: React.FC<{
   </div>
 );
 
-export const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, accounts = [], onEdit, onDelete, onNavigateToAdmin }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, accounts = [], onEdit, onDelete, onNavigateToAdmin, decimalSeparator }) => {
   const [showCharts, setShowCharts] = useState(false);
   const [privacyMode, setPrivacyMode] = useState(true); // Default to true (hidden)
   const [currentPage, setCurrentPage] = useState(1);
@@ -336,6 +338,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, 
           icon={<TrendingUp className="w-6 h-6 text-emerald-600" />} 
           colorClass="bg-emerald-100"
           privacyMode={privacyMode}
+          decimalSeparator={decimalSeparator}
         />
         <StatCard 
           title="Expenses" 
@@ -343,6 +346,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, 
           icon={<TrendingDown className="w-6 h-6 text-red-600" />} 
           colorClass="bg-red-100"
           privacyMode={privacyMode}
+          decimalSeparator={decimalSeparator}
         />
         {hasSavingsAccounts && (
           <StatCard 
@@ -353,6 +357,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, 
             privacyMode={privacyMode}
             isPercentage
             tooltip="Percentage of income added to Savings Accounts this period"
+            decimalSeparator={decimalSeparator}
           />
         )}
         <StatCard 
@@ -362,6 +367,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, 
           colorClass="bg-blue-100"
           privacyMode={privacyMode}
           tooltip={`Includes only checking and regular accounts (Savings excluded)${!isCurrentView ? ' at end of selected period' : ''}`}
+          decimalSeparator={decimalSeparator}
         />
       </div>
 
@@ -373,7 +379,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, 
             {isCurrentView ? 'Current Account Balances' : 'Account Balances (End of Period)'}
           </div>
           <span className="text-xs font-normal text-slate-400 bg-slate-50 px-2 py-1 rounded">
-             Total Net Worth: {privacyMode ? '••••••' : formatCurrency(totalNetWorth)}
+             Total Net Worth: {privacyMode ? '••••••' : formatCurrency(totalNetWorth, decimalSeparator)}
           </span>
         </h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -392,7 +398,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, 
                     {acc.account}
                   </p>
                   <p className={`font-bold ${acc.balance >= 0 ? 'text-slate-800' : 'text-red-600'}`}>
-                    {privacyMode ? '••••••' : formatCurrency(acc.balance)}
+                    {privacyMode ? '••••••' : formatCurrency(acc.balance, decimalSeparator)}
                   </p>
                 </div>
               </div>
@@ -456,7 +462,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, 
                               />
                             ))}
                           </Pie>
-                          <Tooltip formatter={(value) => privacyMode ? '••••••' : formatCurrency(value as number)} />
+                          <Tooltip formatter={(value) => privacyMode ? '••••••' : formatCurrency(value as number, decimalSeparator)} />
                           <Legend verticalAlign="bottom" height={36}/>
                         </PieChart>
                       </ResponsiveContainer>
@@ -478,7 +484,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, 
                       <div className="flex items-center justify-between border-b border-slate-100 pb-2">
                          <h4 className="font-bold text-slate-700">{groupName} Expenses</h4>
                          <span className="text-sm font-semibold text-slate-900">
-                           {privacyMode ? '••••••' : formatCurrency(data.total)}
+                           {privacyMode ? '••••••' : formatCurrency(data.total, decimalSeparator)}
                          </span>
                       </div>
                       <div className="space-y-3">
@@ -489,7 +495,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, 
                                 <div className="flex justify-between text-sm z-10 relative mb-1">
                                    <span className="text-slate-600">{catName}</span>
                                    <span className="font-medium text-slate-700">
-                                     {privacyMode ? '••••••' : formatCurrency(amount as number)}
+                                     {privacyMode ? '••••••' : formatCurrency(amount as number, decimalSeparator)}
                                    </span>
                                 </div>
                                 <div className="w-full bg-slate-50 rounded-full h-1.5 overflow-hidden">
@@ -574,11 +580,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, 
                       <td className="px-4 sm:px-6 py-3 text-right whitespace-nowrap">
                         <div className="flex flex-col items-end gap-0.5">
                           <span className={`font-semibold ${t.type === 'Income' || isPositiveBalance ? 'text-emerald-600' : 'text-slate-800'}`}>
-                            {t.type === 'Income' || isPositiveBalance ? '+' : ''}{formatCurrency(t.amount)}
+                            {t.type === 'Income' || isPositiveBalance ? '+' : ''}{formatCurrency(t.amount, decimalSeparator)}
                           </span>
                           {t.balanceAfterTransaction !== undefined && (
                             <span className="text-xs text-slate-400 font-medium">
-                              {privacyMode ? '••••••' : formatCurrency(t.balanceAfterTransaction)}
+                              {privacyMode ? '••••••' : formatCurrency(t.balanceAfterTransaction, decimalSeparator)}
                             </span>
                           )}
                         </div>

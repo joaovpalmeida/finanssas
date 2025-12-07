@@ -1,9 +1,8 @@
-
 import React, { useState, useEffect, useRef } from 'react';
-import { Download, Trash2, Settings, Tag, CreditCard, Edit2, Save, X, UploadCloud, AlertTriangle, Upload, Wand2, Key, PiggyBank, Plus, CalendarRange, Lock, Unlock } from 'lucide-react';
+import { Download, Trash2, Settings, Tag, CreditCard, Edit2, Save, X, UploadCloud, AlertTriangle, Upload, Wand2, Key, PiggyBank, Plus, CalendarRange, Lock, Unlock, Hash } from 'lucide-react';
 import { SqlConsole } from './SqlConsole';
 import { FileUpload } from './FileUpload';
-import { getAccounts, getCategories, updateAccount, updateCategory, createCategory, deleteCategory, deleteAccount, getTransactionCount, generateDummyData, getApiKey, saveApiKey, createAccount, getFiscalConfig, saveFiscalConfig, isDatabaseEncrypted, setDatabasePassword, removeDatabasePassword } from '../services/db';
+import { getAccounts, getCategories, updateAccount, updateCategory, createCategory, deleteCategory, deleteAccount, getTransactionCount, generateDummyData, getApiKey, saveApiKey, createAccount, getFiscalConfig, saveFiscalConfig, isDatabaseEncrypted, setDatabasePassword, removeDatabasePassword, saveImportConfig } from '../services/db';
 import { Account, Category, Transaction, FiscalConfig } from '../types';
 
 interface AdminPageProps {
@@ -14,6 +13,7 @@ interface AdminPageProps {
   onRestore: (file: File) => void;
   isUploading: boolean;
   uploadError: string | null;
+  decimalSeparator: '.' | ',';
 }
 
 export const AdminPage: React.FC<AdminPageProps> = ({ 
@@ -23,7 +23,8 @@ export const AdminPage: React.FC<AdminPageProps> = ({
   onUpload,
   onRestore, 
   isUploading, 
-  uploadError
+  uploadError,
+  decimalSeparator
 }) => {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -105,6 +106,15 @@ export const AdminPage: React.FC<AdminPageProps> = ({
           alert("Fiscal period configuration saved.");
       } catch (e) {
           alert("Failed to save config.");
+      }
+  };
+
+  const handleUpdateDecimalSeparator = async (val: '.' | ',') => {
+      try {
+          await saveImportConfig({ decimalSeparator: val });
+          refreshData(); // Triggers app refresh which updates global state
+      } catch (e) {
+          alert("Failed to save setting");
       }
   };
 
@@ -343,6 +353,47 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                            Save Configuration
                        </button>
                    </div>
+               </div>
+           </div>
+
+           {/* Number Formatting Config */}
+           <div className="p-5 border border-cyan-200 rounded-xl bg-cyan-50/50 hover:border-cyan-300 transition-all col-span-1 md:col-span-2 lg:col-span-2 flex flex-col">
+               <h3 className="font-semibold text-cyan-800 flex items-center mb-3">
+                   <Hash className="w-4 h-4 mr-2 text-cyan-600" />
+                   Number Format
+               </h3>
+               <p className="text-sm text-cyan-700/80 mb-4 flex-grow">
+                   Choose how currency amounts are displayed and entered across the app.
+               </p>
+               <div className="flex gap-4">
+                   <label className="flex items-center space-x-2 cursor-pointer flex-1 p-3 bg-white border rounded-lg hover:border-cyan-400 transition-colors">
+                       <input 
+                           type="radio" 
+                           name="decimalSep"
+                           checked={decimalSeparator === '.'}
+                           onChange={() => handleUpdateDecimalSeparator('.')}
+                           className="w-4 h-4 text-cyan-600 focus:ring-cyan-500"
+                           style={{ colorScheme: 'light' }}
+                       />
+                       <div>
+                           <div className="font-bold text-slate-800">1,234.56</div>
+                           <div className="text-xs text-slate-500">Dot Decimal (US/UK)</div>
+                       </div>
+                   </label>
+                   <label className="flex items-center space-x-2 cursor-pointer flex-1 p-3 bg-white border rounded-lg hover:border-cyan-400 transition-colors">
+                       <input 
+                           type="radio" 
+                           name="decimalSep"
+                           checked={decimalSeparator === ','}
+                           onChange={() => handleUpdateDecimalSeparator(',')}
+                           className="w-4 h-4 text-cyan-600 focus:ring-cyan-500"
+                           style={{ colorScheme: 'light' }}
+                       />
+                       <div>
+                           <div className="font-bold text-slate-800">1.234,56</div>
+                           <div className="text-xs text-slate-500">Comma Decimal (EU)</div>
+                       </div>
+                   </label>
                </div>
            </div>
 
