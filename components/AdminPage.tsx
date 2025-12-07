@@ -1,8 +1,9 @@
+
 import React, { useState, useEffect, useRef } from 'react';
-import { Download, Trash2, Settings, Tag, CreditCard, Edit2, Save, X, UploadCloud, AlertTriangle, Upload, Wand2, Key, PiggyBank, Plus, CalendarRange } from 'lucide-react';
+import { Download, Trash2, Settings, Tag, CreditCard, Edit2, Save, X, UploadCloud, AlertTriangle, Upload, Wand2, Key, PiggyBank, Plus, CalendarRange, Lock, Unlock } from 'lucide-react';
 import { SqlConsole } from './SqlConsole';
 import { FileUpload } from './FileUpload';
-import { getAccounts, getCategories, updateAccount, updateCategory, createCategory, deleteCategory, deleteAccount, getTransactionCount, generateDummyData, getApiKey, saveApiKey, createAccount, getFiscalConfig, saveFiscalConfig } from '../services/db';
+import { getAccounts, getCategories, updateAccount, updateCategory, createCategory, deleteCategory, deleteAccount, getTransactionCount, generateDummyData, getApiKey, saveApiKey, createAccount, getFiscalConfig, saveFiscalConfig, isDatabaseEncrypted, setDatabasePassword, removeDatabasePassword } from '../services/db';
 import { Account, Category, Transaction, FiscalConfig } from '../types';
 
 interface AdminPageProps {
@@ -29,6 +30,8 @@ export const AdminPage: React.FC<AdminPageProps> = ({
   const [showImport, setShowImport] = useState(false);
   const [dbCount, setDbCount] = useState(0);
   const [generating, setGenerating] = useState(false);
+  const [isEncrypted, setIsEncrypted] = useState(false);
+  const [securityPass, setSecurityPass] = useState('');
   
   // API Key State
   const [apiKey, setApiKey] = useState('');
@@ -39,11 +42,12 @@ export const AdminPage: React.FC<AdminPageProps> = ({
 
   const restoreInputRef = useRef<HTMLInputElement>(null);
 
-  const refreshData = () => {
+  const refreshData = async () => {
     setAccounts(getAccounts());
     setCategories(getCategories());
     setDbCount(getTransactionCount());
     setFiscalConfig(getFiscalConfig());
+    setIsEncrypted(await isDatabaseEncrypted());
     
     const key = getApiKey();
     if (key) {
@@ -124,6 +128,25 @@ export const AdminPage: React.FC<AdminPageProps> = ({
       }
   };
 
+  const handleToggleEncryption = async () => {
+      if (isEncrypted) {
+          if (confirm("Are you sure you want to remove password protection? The database will be stored unencrypted.")) {
+              await removeDatabasePassword();
+              setIsEncrypted(false);
+              setSecurityPass('');
+          }
+      } else {
+          if (!securityPass) {
+              alert("Please enter a password to enable encryption.");
+              return;
+          }
+          await setDatabasePassword(securityPass);
+          setIsEncrypted(true);
+          setSecurityPass('');
+          alert("Encryption enabled. You will be asked for this password next time you load the app.");
+      }
+  };
+
   return (
     <div className="space-y-8 animate-fade-in">
       
@@ -173,15 +196,49 @@ export const AdminPage: React.FC<AdminPageProps> = ({
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           
+           {/* Security Config */}
+           <div className={`p-5 border rounded-xl transition-all col-span-1 md:col-span-2 lg:col-span-2 flex flex-col ${isEncrypted ? 'border-emerald-200 bg-emerald-50/50' : 'border-slate-200 bg-slate-50/50'}`}>
+                <h3 className={`font-semibold flex items-center mb-2 ${isEncrypted ? 'text-emerald-800' : 'text-slate-800'}`}>
+                    {isEncrypted ? <Lock className="w-4 h-4 mr-2 text-emerald-600" /> : <Unlock className="w-4 h-4 mr-2 text-slate-600" />}
+                    Database Security
+                </h3>
+                <p className={`text-sm mb-4 flex-grow ${isEncrypted ? 'text-emerald-700' : 'text-slate-600'}`}>
+                    {isEncrypted 
+                        ? "Database is encrypted at rest. A password is required to load the app." 
+                        : "Database is stored unencrypted in the browser. Anyone with access to this device can read it."}
+                </p>
+                
+                {!isEncrypted && (
+                    <input 
+                        type="password"
+                        placeholder="Set new password..."
+                        className="mb-3 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm w-full"
+                        value={securityPass}
+                        onChange={(e) => setSecurityPass(e.target.value)}
+                    />
+                )}
+
+                <button 
+                    onClick={handleToggleEncryption}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors w-full border shadow-sm ${
+                        isEncrypted 
+                        ? 'bg-white text-red-600 border-red-200 hover:bg-red-50' 
+                        : 'bg-white text-blue-600 border-blue-200 hover:bg-blue-50'
+                    }`}
+                >
+                    {isEncrypted ? 'Remove Encryption' : 'Enable Encryption'}
+                </button>
+           </div>
+
            {/* API Key Config */}
-           <div className="p-5 border border-purple-200 rounded-xl bg-purple-50/50 hover:border-purple-300 transition-all col-span-1 md:col-span-2 lg:col-span-4 flex flex-col">
+           <div className="p-5 border border-purple-200 rounded-xl bg-purple-50/50 hover:border-purple-300 transition-all col-span-1 md:col-span-2 lg:col-span-2 flex flex-col">
                 <div className="max-w-3xl">
                   <h3 className="font-semibold text-purple-800 flex items-center mb-2">
                     <Key className="w-4 h-4 mr-2 text-purple-600" />
                     Google Gemini API
                   </h3>
                   <p className="text-sm text-purple-600/70 mb-4">
-                    Enter your API Key to enable AI Insights and Chat. The key is stored locally in your database.
+                    Enable AI Insights and Chat. Stored locally.
                   </p>
                   <div className="flex space-x-2">
                       <input 

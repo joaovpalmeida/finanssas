@@ -1,7 +1,7 @@
 import React from 'react';
 import { 
   Shield, LayoutDashboard, CreditCard, UploadCloud, 
-  Sparkles, Target, Settings, HelpCircle 
+  Sparkles, Target, Settings, HelpCircle, Lock 
 } from 'lucide-react';
 
 const HelpSection: React.FC<{ title: string; icon: React.ElementType; children: React.ReactNode }> = ({ title, icon: Icon, children }) => (
@@ -40,9 +40,10 @@ export const HelpPage: React.FC = () => {
                 Finan$$as works on a <strong>Local-First</strong> architecture. This means there is no central server storing your financial data.
             </p>
             <ul className="list-disc pl-5 space-y-1 mt-2">
-                <li>Your data is stored securely inside your browser's database (IndexedDB/SQLite).</li>
-                <li>If you clear your browser data or use a different device, your records will not be there unless you restore a backup.</li>
-                <li><strong>Important:</strong> Use the <em>Backup</em> button in the Admin tab regularly to download a <code>.sqlite</code> file of your data.</li>
+                <li>Your data is stored inside your browser's database (IndexedDB/SQLite).</li>
+                <li><strong>Encryption:</strong> You can enable password protection in the Admin tab. This encrypts your database file so it cannot be read without your password.</li>
+                <li className="text-amber-600 font-medium">Warning: Because there is no server, there is no "Forgot Password" feature. If you enable encryption and lose your password, your data is lost forever.</li>
+                <li><strong>Backups:</strong> Use the <em>Backup</em> button in the Admin tab regularly to download a <code>.sqlite</code> file of your data.</li>
             </ul>
             </HelpSection>
         </div>
@@ -89,7 +90,7 @@ export const HelpPage: React.FC = () => {
           </p>
           <ul className="list-disc pl-5 space-y-1 mt-2">
             <li><strong>Smart Mapping:</strong> Map columns like Date, Description, and Amount. Supports both single-column amounts and split Income/Expense columns.</li>
-            <li><strong>Auto-Categorization:</strong> The system remembers your manual edits. If you upload a description it recognizes from the past, it will suggest the category automatically (indicated by a sparkles icon).</li>
+            <li><strong>Auto-Categorization:</strong> The system remembers your past edits. If you upload a description it recognizes, it will suggest the category automatically (indicated by a sparkles icon).</li>
             <li><strong>Duplicate Detection:</strong> Prevents re-importing the same transaction twice based on date, amount, and description.</li>
           </ul>
         </HelpSection>
@@ -123,6 +124,7 @@ export const HelpPage: React.FC = () => {
         <HelpSection title="Configuration" icon={Settings}>
           <p>Customize the app to fit your lifestyle in the Admin tab.</p>
           <ul className="list-disc pl-5 space-y-1 mt-2">
+            <li><strong>Security:</strong> Set a password to encrypt your database.</li>
             <li><strong>Categories:</strong> Create custom categories. Group them as "Recurring" (Rent, Bills) or "General" (Food, Fun) for structured reporting.</li>
             <li><strong>Fiscal Settings:</strong> Change how months are calculated (e.g., calendar month, or starting on the 25th).</li>
             <li><strong>Demo Mode:</strong> If the database is empty, you can generate dummy data to test the features.</li>

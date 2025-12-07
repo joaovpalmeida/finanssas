@@ -4,10 +4,11 @@ Finan$$as is a local-first, privacy-focused personal finance application that tu
 
 ## Features
 
-*   **Local-First Architecture:** No backend server. Data is stored entirely in your browser using SQLite Wasm and IndexedDB.
-*   **Excel/CSV Import:** Advanced importer with support for column mapping, split income/expense columns, and manual overrides.
-*   **Manual Entry & Transfers:** Record income, expenses, and transfers between accounts directly within the app.
-*   **Interactive Dashboard:** Visualize cash flow, detailed expense breakdowns, and account balances.
+*   **Local-First & Secure:** No backend server. Data is stored entirely in your browser using SQLite Wasm.
+*   **Database Encryption:** Optional AES-GCM encryption allows you to password-protect your financial data at rest.
+*   **Advanced Import:** Bulk import Excel/CSV files with smart column mapping. The app learns from your history to auto-suggest categories for known merchants.
+*   **Flexible Tracking:** Record Income, Expenses, Transfers, and **Balance Adjustments** (for setting initial balances or correcting drift).
+*   **Interactive Dashboard:** Visualize cash flow, detailed expense breakdowns, and net worth across all accounts.
 *   **Mobile Optimized:** Fully responsive design ensures a great experience on phones and tablets.
 *   **AI Insights:** Analyze spending habits and chat with your data using Google Gemini.
 *   **Savings Goals:** Track progress towards financial targets with multi-account support.
@@ -67,6 +68,7 @@ The output will be located in the `dist/` (or `build/`) folder. You can deploy t
 *   **Frontend:** React 19, TypeScript
 *   **Styling:** Tailwind CSS
 *   **Database:** sql.js (SQLite compiled to WebAssembly)
+*   **Security:** Web Crypto API (PBKDF2/AES-GCM)
 *   **Visualization:** Recharts
 *   **AI Integration:** @google/genai SDK
 *   **Data Processing:** SheetJS (xlsx)

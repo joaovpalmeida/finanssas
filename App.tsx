@@ -1,11 +1,12 @@
+
 import React, { useState, useEffect, useMemo, Suspense } from 'react';
 import { Wallet, Loader2, Plus, Settings, Target, Search, Home, Menu, X, BarChart3, Sparkles, HelpCircle } from 'lucide-react';
 import { Transaction, Account, Category } from './types';
-import { initDB, insertTransactions, getAllTransactions, resetDB, exportDatabaseBlob, deleteTransaction, getAccounts, getCategories, importDatabase } from './services/db';
+import { initDB, insertTransactions, getAllTransactions, resetDB, exportDatabaseBlob, deleteTransaction, getAccounts, getCategories, importDatabase, unlockDB, DBStatus } from './services/db';
 import { calculateRunningBalances, aggregateData } from './utils/helpers';
+import { PasswordPrompt } from './components/PasswordPrompt';
 
 // Lazy Load Components
-// We use the .then() pattern to handle named exports (export const ...)
 const Dashboard = React.lazy(() => import('./components/Dashboard').then(module => ({ default: module.Dashboard })));
 const Insights = React.lazy(() => import('./components/Insights').then(module => ({ default: module.Insights })));
 const AdminPage = React.lazy(() => import('./components/AdminPage').then(module => ({ default: module.AdminPage })));
@@ -29,7 +30,7 @@ function App() {
   const [categories, setCategories] = useState<Category[]>([]);
   
   const [isLoading, setIsLoading] = useState(false);
-  const [isDbReady, setIsDbReady] = useState(false);
+  const [dbStatus, setDbStatus] = useState<DBStatus>('LOADING');
   const [error, setError] = useState<string | null>(null);
   
   // 'landing' is now the default
@@ -41,9 +42,9 @@ function App() {
 
   useEffect(() => {
     const setupDB = async () => {
-      const ready = await initDB();
-      setIsDbReady(ready);
-      if (ready) {
+      const status = await initDB();
+      setDbStatus(status);
+      if (status === 'READY') {
         refreshTransactions();
       }
     };
@@ -60,6 +61,16 @@ function App() {
     // Also refresh metadata
     setAccounts(getAccounts());
     setCategories(getCategories());
+  };
+
+  const handleUnlock = async (password: string) => {
+      const success = await unlockDB(password);
+      if (success) {
+          setDbStatus('READY');
+          refreshTransactions();
+          return true;
+      }
+      return false;
   };
 
   // Calculate current account balances for the Savings tab
@@ -152,13 +163,26 @@ function App() {
     { id: 'help', label: 'Help', icon: HelpCircle },
   ] as const;
 
-  if (!isDbReady) {
+  if (dbStatus === 'LOADING') {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center flex-col">
         <Loader2 className="w-10 h-10 text-blue-600 animate-spin mb-4" />
         <h2 className="text-slate-600 font-medium">Initializing Secure Database...</h2>
       </div>
     );
+  }
+
+  if (dbStatus === 'LOCKED') {
+      return <PasswordPrompt onUnlock={handleUnlock} />;
+  }
+
+  if (dbStatus === 'ERROR') {
+      return (
+        <div className="min-h-screen bg-slate-50 flex items-center justify-center flex-col p-4 text-center">
+            <h2 className="text-red-600 font-bold text-xl mb-2">Database Error</h2>
+            <p className="text-slate-600">Failed to load the database engine. Please refresh the page.</p>
+        </div>
+      );
   }
 
   return (

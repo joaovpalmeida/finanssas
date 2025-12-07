@@ -1,5 +1,5 @@
 import React from 'react';
-import { Shield, Lock, Cpu, LayoutDashboard, Brain, FileSpreadsheet, ArrowRight, Database, Code2, Smartphone } from 'lucide-react';
+import { Shield, Lock, Cpu, LayoutDashboard, Brain, FileSpreadsheet, ArrowRight, Database, Code2, Smartphone, Key } from 'lucide-react';
 
 interface LandingPageProps {
   onGetStarted: () => void;
@@ -41,12 +41,12 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted }) => {
             </p>
             <ul className="space-y-3">
               <li className="flex items-center text-slate-700">
-                <Lock className="w-4 h-4 mr-3 text-emerald-500" />
+                <Database className="w-4 h-4 mr-3 text-emerald-500" />
                 Data never leaves your device (except for AI Analysis)
               </li>
               <li className="flex items-center text-slate-700">
-                <Database className="w-4 h-4 mr-3 text-emerald-500" />
-                Full SQL capabilities without the cloud
+                <Key className="w-4 h-4 mr-3 text-emerald-500" />
+                Optional AES-GCM encryption at rest
               </li>
               <li className="flex items-center text-slate-700">
                 <FileSpreadsheet className="w-4 h-4 mr-3 text-emerald-500" />

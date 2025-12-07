@@ -1,41 +1,91 @@
+
 import { Transaction, TransactionType, SavingsGoal, Category, Account, CategoryGroup, SearchFilters, FiscalConfig } from '../types';
 import { generateTransactionSignature } from '../utils/helpers';
+import { encryptDatabase, decryptDatabase, EncryptedData } from '../utils/encryption';
 
 let db: any = null;
 let SQL: any = null;
+let currentDbPassword: string | null = null;
 
 const DB_NAME = 'finance_db';
 const STORE_NAME = 'sqlite_store';
 const KEY_NAME = 'db_binary';
 
+export type DBStatus = 'LOADING' | 'READY' | 'LOCKED' | 'ERROR';
+
 // Initialize sql.js and load DB from IndexedDB if available
-export const initDB = async (): Promise<boolean> => {
-  if (db) return true;
+export const initDB = async (): Promise<DBStatus> => {
+  if (db) return 'READY';
 
   // @ts-ignore
   if (!window.initSqlJs) {
     console.error("sql.js not loaded");
-    return false;
+    return 'ERROR';
   }
 
-  // @ts-ignore
-  SQL = await window.initSqlJs({
-    locateFile: (file: string) => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/${file}`
-  });
+  try {
+    // @ts-ignore
+    SQL = await window.initSqlJs({
+        locateFile: (file: string) => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/${file}`
+    });
 
-  const savedData = await loadFromIndexedDB();
-  
-  if (savedData) {
-    db = new SQL.Database(new Uint8Array(savedData));
-    db.run("PRAGMA foreign_keys = ON;"); // Enable FK support
-    migrateSchema(); 
-  } else {
-    db = new SQL.Database();
-    db.run("PRAGMA foreign_keys = ON;"); // Enable FK support
-    initSchema();
+    const savedData = await loadFromIndexedDB();
+    
+    if (savedData) {
+        // Check if encrypted
+        if ((savedData as any).encrypted) {
+            return 'LOCKED';
+        }
+
+        // It is a raw Uint8Array/ArrayBuffer
+        db = new SQL.Database(new Uint8Array(savedData as ArrayBuffer));
+        db.run("PRAGMA foreign_keys = ON;"); 
+        migrateSchema(); 
+    } else {
+        db = new SQL.Database();
+        db.run("PRAGMA foreign_keys = ON;"); 
+        initSchema();
+    }
+
+    return 'READY';
+  } catch (e) {
+    console.error("Failed to init DB", e);
+    return 'ERROR';
   }
+};
 
-  return true;
+export const unlockDB = async (password: string): Promise<boolean> => {
+    try {
+        const savedData = await loadFromIndexedDB();
+        if (!savedData || !(savedData as any).encrypted) return false;
+
+        const decryptedBuffer = await decryptDatabase(savedData as EncryptedData, password);
+        
+        db = new SQL.Database(decryptedBuffer);
+        db.run("PRAGMA foreign_keys = ON;");
+        migrateSchema();
+        
+        currentDbPassword = password; // Store in memory for future saves
+        return true;
+    } catch (e) {
+        console.error("Unlock failed", e);
+        return false;
+    }
+};
+
+export const isDatabaseEncrypted = async (): Promise<boolean> => {
+    const data = await loadFromIndexedDB();
+    return !!(data && (data as any).encrypted);
+};
+
+export const setDatabasePassword = async (password: string) => {
+    currentDbPassword = password;
+    await saveDB();
+};
+
+export const removeDatabasePassword = async () => {
+    currentDbPassword = null;
+    await saveDB();
 };
 
 const initSchema = () => {
@@ -94,8 +144,14 @@ const migrateSchema = () => {
 
 export const saveDB = async () => {
   if (!db) return;
-  const data = db.export();
-  await saveToIndexedDB(data);
+  const data = db.export(); // Returns Uint8Array
+  
+  if (currentDbPassword) {
+      const encryptedData = await encryptDatabase(data, currentDbPassword);
+      await saveToIndexedDB(encryptedData);
+  } else {
+      await saveToIndexedDB(data);
+  }
 };
 
 export const resetDB = async () => {
@@ -141,6 +197,9 @@ export const importDatabase = async (file: File): Promise<void> => {
         db.run("PRAGMA foreign_keys = ON;");
         migrateSchema();
         
+        // If we imported a fresh DB, we should probably keep the existing password preference 
+        // OR reset it. For safety, let's keep the session password if it exists and encrypt the new data,
+        // or if no session password, save raw.
         await saveDB();
         resolve();
       } catch (err) {
@@ -193,8 +252,6 @@ export const getExistingSignatures = (): Set<string> => {
 export const getCategorySuggestions = (): Record<string, string> => {
   if (!db) return {};
   try {
-    // Get all transactions joined with categories, ordered by date ascending.
-    // This allows iterating and updating a map so the 'latest' category for a description wins.
     const sql = `
       SELECT t.description, c.name 
       FROM transactions t
@@ -264,7 +321,7 @@ export const generateDummyData = async () => {
     }
 
     // Resolve Category IDs (Create if not exist)
-    const categoryIds: Record<string, string> = {}; // Key: "Name:Type"
+    const categoryIds: Record<string, string> = {}; 
     for (const cat of categoriesData) {
         const res = db.exec("SELECT id FROM categories WHERE name = ? AND type = ?", [cat.name, cat.type]);
         if (res.length > 0) {
@@ -285,7 +342,6 @@ export const generateDummyData = async () => {
     // Helpers
     const randInt = (min: number, max: number) => Math.floor(Math.random() * (max - min + 1)) + min;
     
-    // Helper to generate ISO string with specific hour/minute
     const getDateWithTime = (baseDate: Date, hour: number, min: number = 0) => {
         const d = new Date(baseDate);
         d.setHours(hour, min, 0, 0);
@@ -329,14 +385,13 @@ export const generateDummyData = async () => {
                 desc: 'Savings Contribution', amount: -1000, cat: 'Transfer', type: 'Transfer', acc: 'Main Checking'
             });
             transactions.push({
-                date: getDateWithTime(currentDate, 9, 5), // Same time, engine will handle order or ID sort
+                date: getDateWithTime(currentDate, 9, 5), 
                 desc: 'Savings Contribution', amount: 1000, cat: 'Transfer', type: 'Transfer', acc: 'Savings'
             });
         }
 
         // --- Daily/Weekly Variable ---
         
-        // Groceries (After work hours)
         if (Math.random() > 0.75) {
              transactions.push({
                 date: getDateWithTime(currentDate, 17, 30),
@@ -344,7 +399,6 @@ export const generateDummyData = async () => {
             });
         }
 
-        // Dining Out (Dinner time)
         if ((isWeekend && Math.random() > 0.3) || (!isWeekend && Math.random() > 0.8)) {
              transactions.push({
                 date: getDateWithTime(currentDate, 20, 0),
@@ -352,7 +406,6 @@ export const generateDummyData = async () => {
             });
         }
 
-        // Transport (Morning commute)
         if (!isWeekend && Math.random() > 0.6) {
              transactions.push({
                 date: getDateWithTime(currentDate, 8, 30),
@@ -360,7 +413,6 @@ export const generateDummyData = async () => {
             });
         }
 
-        // Random Shopping (Afternoon)
         if (day % 10 === 0 && Math.random() > 0.5) {
              transactions.push({
                 date: getDateWithTime(currentDate, 15, 0),
@@ -368,7 +420,6 @@ export const generateDummyData = async () => {
             });
         }
 
-        // Random Freelance Income (Mid-day)
         if (day % 14 === 0 && Math.random() > 0.7) {
              transactions.push({
                 date: getDateWithTime(currentDate, 11, 0),
@@ -376,11 +427,9 @@ export const generateDummyData = async () => {
             });
         }
 
-        // Next Day
         currentDate.setDate(currentDate.getDate() + 1);
     }
 
-    // 3. Batch Insert
     const stmt = db.prepare(`
         INSERT INTO transactions (id, date, description, amount, category_id, account_id, type)
         VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -423,12 +472,11 @@ export const insertTransactions = async (transactions: Transaction[]) => {
   db.run("BEGIN TRANSACTION");
   
   try {
-    // 1. Resolve Accounts (Pre-processing to avoid loop lookups)
-    const accountMap = new Map<string, string>(); // Name -> ID
+    // 1. Resolve Accounts 
+    const accountMap = new Map<string, string>(); 
     const uniqueAccounts = new Set<string>();
     
     transactions.forEach(t => {
-        // Collect names if no ID is present
         if (t.account && !t.accountId) uniqueAccounts.add(t.account);
     });
 
@@ -443,7 +491,6 @@ export const insertTransactions = async (transactions: Transaction[]) => {
         }
     }
     
-    // Ensure "Main Account" exists fallback
     if (!accountMap.has('Main Account')) {
          const res = db.exec("SELECT id FROM accounts WHERE name = 'Main Account'");
          if (res.length > 0) {
@@ -455,14 +502,13 @@ export const insertTransactions = async (transactions: Transaction[]) => {
          }
     }
 
-    // 2. Resolve Categories (Pre-processing)
-    const categoryMap = new Map<string, string>(); // "Name:Type" -> ID
+    // 2. Resolve Categories
+    const categoryMap = new Map<string, string>();
     const catKeys: {name: string, type: string}[] = [];
     
     transactions.forEach(t => {
         if (t.category && !t.categoryId) {
              const type = t.type || 'Expense';
-             // Check if already processed in this batch to avoid dupes in catKeys
              if (!catKeys.some(k => k.name === t.category && k.type === type)) {
                  catKeys.push({ name: t.category, type });
              }
@@ -500,9 +546,6 @@ export const insertTransactions = async (transactions: Transaction[]) => {
             catId = categoryMap.get(`${t.category}:${type}`) || '';
         }
         
-        // Handle case where catId might still be empty (Uncategorized fallback?)
-        // Schema allows NULL category_id, so empty string might need conversion to null if strict,
-        // but current schema checks are loose. We pass null if empty string to be safe for FK.
         const finalCatId = catId || null;
 
         insertTxn.run([t.id, t.date, t.description, t.amount, finalCatId, accId, t.type]);
@@ -528,7 +571,6 @@ export const deleteTransaction = async (id: string) => {
 export const getAllTransactions = (): Transaction[] => {
   if (!db) return [];
   try {
-    // JOIN to get names for the UI
     const sql = `
       SELECT 
         t.id, t.date, t.description, t.amount, t.type,
@@ -550,9 +592,9 @@ export const getAllTransactions = (): Transaction[] => {
       amount: row[3],
       type: row[4],
       categoryId: row[5],
-      category: row[6] || 'Unknown', // mapped to 'category' for UI compat
+      category: row[6] || 'Unknown', 
       accountId: row[7],
-      account: row[8] || 'Unknown'   // mapped to 'account' for UI compat
+      account: row[8] || 'Unknown' 
     } as Transaction));
   } catch (e) {
     console.error("Error fetching transactions", e);
@@ -581,8 +623,6 @@ export const searchTransactions = (filters: SearchFilters): Transaction[] => {
   }
 
   if (filters.category) {
-    // Search by name since the filter usually comes from a text dropdown/input in this app context
-    // Ideally should be ID, but preserving existing behavior of filtering by Name string
     sql += " AND c.name = ?";
     params.push(filters.category);
   }
@@ -704,14 +744,12 @@ export const createCategory = async (name: string, type: string, group: string) 
 
 export const updateCategory = async (id: string, newName: string, newType: string, group: string) => {
   if (!db) return;
-  // Simpler now: Just update the category definition. Foreign Keys handle the rest.
   db.run("UPDATE categories SET name = ?, type = ?, group_name = ? WHERE id = ?", [newName, newType, group, id]);
   await saveDB();
 };
 
 export const updateAccount = async (id: string, newName: string, isSavings: boolean) => {
   if (!db) return;
-  // Simpler now: Just update definition.
   db.run("UPDATE accounts SET name = ?, is_savings = ? WHERE id = ?", [newName, isSavings ? 1 : 0, id]);
   await saveDB();
 };
@@ -719,12 +757,10 @@ export const updateAccount = async (id: string, newName: string, isSavings: bool
 export const deleteCategory = async (id: string): Promise<boolean> => {
   if (!db) return false;
   
-  // Check if used
   const countRes = db.exec("SELECT count(*) FROM transactions WHERE category_id = ?", [id]);
   const count = countRes[0].values[0][0];
 
   if (count > 0) {
-    // Get name for error message
     const nameRes = db.exec("SELECT name FROM categories WHERE id = ?", [id]);
     const name = nameRes.length ? nameRes[0].values[0][0] : 'Unknown';
     throw new Error(`Cannot delete category "${name}" because it is used in ${count} transaction(s).`);
@@ -832,7 +868,7 @@ export const saveFiscalConfig = async (config: FiscalConfig) => {
 
 export const insertSavingsGoal = async (goal: SavingsGoal) => {
   if (!db) return;
-  const accountsJson = JSON.stringify(goal.targetAccounts); // Storing IDs now
+  const accountsJson = JSON.stringify(goal.targetAccounts); 
   db.run("INSERT OR REPLACE INTO savings_goals VALUES (?, ?, ?, ?, ?)", [
     goal.id, goal.name, goal.targetAmount, goal.deadline, accountsJson
   ]);
@@ -866,7 +902,6 @@ export const getSavingsGoals = (): SavingsGoal[] => {
         if (Array.isArray(parsed)) {
           accounts = parsed;
         } else {
-          // Backward compatibility for old DBs with simple string names, though ideally we wipe DB
           accounts = [String(rowObj.targetAccount)]; 
         }
       } catch (e) {
@@ -912,7 +947,7 @@ export const runQuery = (sql: string): { columns: string[], values: any[][] } | 
 };
 
 // IndexedDB Helpers
-const loadFromIndexedDB = (): Promise<ArrayBuffer | null> => {
+const loadFromIndexedDB = (): Promise<ArrayBuffer | EncryptedData | null> => {
   return new Promise((resolve) => {
     const request = indexedDB.open(DB_NAME, 1);
     
@@ -939,7 +974,7 @@ const loadFromIndexedDB = (): Promise<ArrayBuffer | null> => {
   });
 };
 
-const saveToIndexedDB = (data: Uint8Array): Promise<void> => {
+const saveToIndexedDB = (data: Uint8Array | EncryptedData): Promise<void> => {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, 1);
     
