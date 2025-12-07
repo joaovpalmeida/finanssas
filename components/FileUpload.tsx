@@ -238,6 +238,9 @@ export const FileUpload: React.FC<FileUploadProps> = ({
                 processedPreview.push({ ...t, duplicateStatus: status, isAutoCategorized: autoCat });
             });
 
+            // Sort by Date Descending
+            processedPreview.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
             setParsedPreview(processedPreview);
             setSelectedIds(initialSelection);
             setStep('preview');
@@ -625,7 +628,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({
                                     </span>
                                     {t.isAutoCategorized && (
                                         <span title="Auto-suggested from history" className="flex items-center">
-                                            <Sparkles className="w-3 h-3 text-purple-400" />
+                                            <span title="Auto-suggested"><Sparkles className="w-3 h-3 text-purple-400" /></span>
                                         </span>
                                     )}
                                     <Edit2 className="w-3 h-3 text-slate-300 group-hover/catQl:text-blue-500 transition-colors" />
