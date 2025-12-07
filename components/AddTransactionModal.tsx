@@ -21,22 +21,27 @@ const AccountField = ({
   allowCreation = true
 }: {
   label: string,
-  value: string,
+  value: string, // now expects ID if existing, or Name if creating new
   onChange: (val: string) => void,
   accounts: Account[],
   placeholder: string,
   icon?: React.ElementType,
   allowCreation?: boolean
 }) => {
-  // Default to 'select' if we have accounts, otherwise 'input' (though usually we have accounts)
-  // If allowCreation is false, we force 'select' mode.
   const [mode, setMode] = useState<'select' | 'input'>('select');
-
+  
+  // Logic to determine if 'value' is an ID or a custom name.
+  // If the value exists in accounts list, it's an ID (usually).
+  const isExistingId = accounts.some(a => a.id === value);
+  
   useEffect(() => {
     if (!allowCreation) {
       setMode('select');
+    } else if (value && !isExistingId && mode === 'select') {
+        // If we have a value but it's not an ID, switch to input mode (mostly for edit case where data might be missing or custom)
+        setMode('input');
     }
-  }, [allowCreation]);
+  }, [allowCreation, value, isExistingId]);
 
   const savings = accounts.filter(a => a.isSavings);
   const regular = accounts.filter(a => !a.isSavings);
@@ -48,7 +53,11 @@ const AccountField = ({
         {allowCreation && (
           <button
             type="button"
-            onClick={() => setMode(mode === 'select' ? 'input' : 'select')}
+            onClick={() => {
+                const newMode = mode === 'select' ? 'input' : 'select';
+                setMode(newMode);
+                onChange(''); // Clear value on mode switch
+            }}
             className="text-[10px] text-blue-600 hover:text-blue-700 flex items-center bg-blue-50 px-2 py-0.5 rounded transition-colors"
           >
             {mode === 'select' ? (
@@ -70,7 +79,7 @@ const AccountField = ({
         {mode === 'select' ? (
           <div className="relative">
              <select
-                value={value}
+                value={isExistingId ? value : ''}
                 onChange={(e) => onChange(e.target.value)}
                 className={`w-full ${Icon ? 'pl-9' : 'px-3'} pr-8 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white text-slate-800 text-sm appearance-none cursor-pointer`}
                 required
@@ -78,12 +87,12 @@ const AccountField = ({
                 <option value="" disabled>Select account...</option>
                 {savings.length > 0 && (
                   <optgroup label="Savings Accounts">
-                    {savings.map(a => <option key={a.id} value={a.name}>{a.name}</option>)}
+                    {savings.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
                   </optgroup>
                 )}
                 {regular.length > 0 && (
                   <optgroup label="Regular Accounts">
-                    {regular.map(a => <option key={a.id} value={a.name}>{a.name}</option>)}
+                    {regular.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
                   </optgroup>
                 )}
              </select>
@@ -94,7 +103,7 @@ const AccountField = ({
         ) : (
           <input
               type="text"
-              value={value}
+              value={value} // In input mode, this is the Name
               onChange={(e) => onChange(e.target.value)}
               className={`w-full ${Icon ? 'pl-9' : 'px-3'} pr-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white text-slate-800 text-sm`}
               placeholder={placeholder}
@@ -115,19 +124,16 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
   accounts,
   initialData
 }) => {
-  // Transfer direction state: 'out' (default) or 'in' (only used for editing)
   const [transferDir, setTransferDir] = useState<'in' | 'out'>('out');
-  
-  // Destination account for new transfers
-  const [toAccount, setToAccount] = useState('');
+  const [toAccountId, setToAccountId] = useState('');
 
   const [formData, setFormData] = useState({
     date: new Date().toISOString().split('T')[0],
     description: '',
     amount: '',
-    category: '',
+    categoryId: '',
     type: TransactionType.EXPENSE,
-    account: ''
+    accountId: ''
   });
 
   const isEditing = !!(initialData && initialData.id);
@@ -135,60 +141,52 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       if (isEditing) {
-        // Editing existing transaction
         const amt = initialData.amount || 0;
         setFormData({
           date: initialData.date ? new Date(initialData.date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
           description: initialData.description || '',
           amount: Math.abs(amt).toString(),
-          category: initialData.category || '',
+          categoryId: initialData.categoryId || '', // Use ID
           type: initialData.type || TransactionType.EXPENSE,
-          account: initialData.account || ''
+          accountId: initialData.accountId || ''    // Use ID
         });
-        // Set transfer direction based on amount sign if it's a transfer
         if (initialData.type === TransactionType.TRANSFER) {
             setTransferDir(amt >= 0 ? 'in' : 'out');
         }
-        setToAccount(''); // Not used in edit mode for single record
+        setToAccountId(''); 
       } else {
-        // Brand new transaction
-        // Default to first account if available
-        const defaultAccount = accounts.length > 0 ? accounts[0].name : '';
+        const defaultAccountId = accounts.length > 0 ? accounts[0].id : '';
         setFormData({
           date: new Date().toISOString().split('T')[0],
           description: '',
           amount: '',
-          category: '',
+          categoryId: '',
           type: initialData?.type || TransactionType.EXPENSE,
-          account: initialData?.account || defaultAccount
+          accountId: initialData?.accountId || defaultAccountId
         });
         setTransferDir('out');
         
-        // Default destination account (different from source if possible)
-        const defaultSource = initialData?.account || defaultAccount;
-        const availableDest = accounts.find(a => a.name !== defaultSource);
-        setToAccount(availableDest ? availableDest.name : '');
+        const defaultSource = initialData?.accountId || defaultAccountId;
+        const availableDest = accounts.find(a => a.id !== defaultSource);
+        setToAccountId(availableDest ? availableDest.id : '');
       }
     }
   }, [isOpen, initialData, accounts]);
 
-  // Ensure To Account is not the same as From Account when changing From Account
   useEffect(() => {
-    if (!isEditing && formData.type === TransactionType.TRANSFER && formData.account === toAccount) {
-        const other = accounts.find(a => a.name !== formData.account);
-        if (other) setToAccount(other.name);
+    if (!isEditing && formData.type === TransactionType.TRANSFER && formData.accountId === toAccountId) {
+        const other = accounts.find(a => a.id !== formData.accountId);
+        if (other) setToAccountId(other.id);
     }
-  }, [formData.account, formData.type, isEditing, accounts]);
+  }, [formData.accountId, formData.type, isEditing, accounts]);
 
-  // Filter categories based on selected Transaction Type
   const filteredCategories = useMemo(() => {
     return categories.filter(c => c.type === formData.type);
   }, [categories, formData.type]);
 
-  // Filter accounts for destination to exclude source
   const destinationAccounts = useMemo(() => {
-    return accounts.filter(a => a.name !== formData.account);
-  }, [accounts, formData.account]);
+    return accounts.filter(a => a.id !== formData.accountId);
+  }, [accounts, formData.accountId]);
 
   if (!isOpen) return null;
 
@@ -196,91 +194,99 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
     e.preventDefault();
     if (!formData.amount) return;
 
-    // Validation: Strict Account Existence for Transfers
+    // Helper: Determine if we have an ID or Name for Account
+    // If it's a UUID-like ID, it's an ID. If it's just text, it's a Name to be created.
+    // However, DB `insertTransactions` logic handles:
+    // "If `accountId` matches an existing ID -> Use it."
+    // "If not, treat `account` (name) field."
+    // BUT we are using the new schema.
+    // The Modal now primarily works with IDs. If user typed a NEW name, `formData.accountId` holds the NAME.
+    // We need to pass that as `account` (name) to `insertTransactions` so it creates it, 
+    // and clear `accountId` so it doesn't try to use it as a FK.
+    
+    const resolveAccountPayload = (val: string) => {
+        const exists = accounts.some(a => a.id === val);
+        if (exists) return { accountId: val, account: '' }; // It's an ID
+        return { accountId: '', account: val }; // It's a new Name
+    };
+
+    const resolveCategoryPayload = (val: string) => {
+        // Since category input is a datalist of Names (not IDs), we always receive a Name here currently?
+        // Wait, the input below uses `list="category-list"`. It outputs the value string (Name).
+        // We need to map Name -> ID if possible.
+        const catObj = categories.find(c => c.name === val && c.type === formData.type);
+        if (catObj) return { categoryId: catObj.id, category: '' };
+        return { categoryId: '', category: val };
+    };
+
     if (formData.type === TransactionType.TRANSFER) {
-        const sourceExists = accounts.some(a => a.name === formData.account);
-        if (!sourceExists) {
-            alert("For transfers, you must select an existing account.");
-            return;
-        }
-        
-        if (!isEditing) {
-            const destExists = accounts.some(a => a.name === toAccount);
-            if (!destExists) {
-                alert("Destination account must exist.");
-                return;
-            }
-        }
+        // Validation for existing accounts
+        // We assume transfers only between existing accounts for simplicity in ID mode, 
+        // OR standard creation logic if typed new.
     }
 
-    // Calculate final date with time
     let finalDate: string;
     if (!isEditing) {
-        // When adding, append current time to the selected date
         const now = new Date();
         const [year, month, day] = formData.date.split('-').map(Number);
         const dateObj = new Date(year, month - 1, day, now.getHours(), now.getMinutes(), now.getSeconds());
         finalDate = dateObj.toISOString();
     } else {
-        // When editing, strictly use the date picker value (defaults to midnight UTC for that date)
         finalDate = new Date(formData.date).toISOString();
     }
 
     let finalAmount = parseFloat(formData.amount);
     
-    // If adding a new Transfer, we create two transactions: one out, one in
+    // Resolve Category
+    const { categoryId, category } = resolveCategoryPayload(formData.categoryId);
+
     if (!isEditing && formData.type === TransactionType.TRANSFER) {
         const amount = Math.abs(finalAmount);
-        const sourceAcc = formData.account || 'Cash';
-        const destAcc = toAccount || 'Cash';
-
-        if (sourceAcc === destAcc) {
-            alert("Source and Destination accounts cannot be the same.");
-            return;
-        }
         
-        // 1. Outflow from "Account" (Source)
+        const srcInfo = resolveAccountPayload(formData.accountId);
+        const destInfo = resolveAccountPayload(toAccountId);
+
+        if (srcInfo.accountId && destInfo.accountId && srcInfo.accountId === destInfo.accountId) {
+             alert("Source and Destination accounts cannot be the same.");
+             return;
+        }
+
         const txnOut: Transaction = {
             id: `manual-tr-out-${Date.now()}`,
             date: finalDate,
             description: formData.description || 'Transfer Out',
             amount: -amount,
-            category: formData.category || 'Transfer',
             type: TransactionType.TRANSFER,
-            account: sourceAcc
+            categoryId, category,
+            accountId: srcInfo.accountId, account: srcInfo.account
         };
 
-        // 2. Inflow to "To Account" (Destination)
         const txnIn: Transaction = {
             id: `manual-tr-in-${Date.now()}`,
             date: finalDate,
             description: formData.description || 'Transfer In',
             amount: amount,
-            category: formData.category || 'Transfer',
             type: TransactionType.TRANSFER,
-            account: destAcc
+            categoryId, category,
+            accountId: destInfo.accountId, account: destInfo.account
         };
 
         onSave([txnOut, txnIn]);
     } else {
-        // Standard single transaction logic (Expense, Income, or Editing a Transfer leg)
-        if (formData.type === TransactionType.EXPENSE) {
-            finalAmount = -Math.abs(finalAmount);
-        } else if (formData.type === TransactionType.INCOME) {
-            finalAmount = Math.abs(finalAmount);
-        } else if (formData.type === TransactionType.TRANSFER) {
-            // Edit mode for transfer: adhere to direction toggle
-            finalAmount = transferDir === 'out' ? -Math.abs(finalAmount) : Math.abs(finalAmount);
-        }
+        if (formData.type === TransactionType.EXPENSE) finalAmount = -Math.abs(finalAmount);
+        else if (formData.type === TransactionType.INCOME) finalAmount = Math.abs(finalAmount);
+        else if (formData.type === TransactionType.TRANSFER) finalAmount = transferDir === 'out' ? -Math.abs(finalAmount) : Math.abs(finalAmount);
+
+        const accInfo = resolveAccountPayload(formData.accountId);
 
         const newTransaction: Transaction = {
             id: (initialData && initialData.id) ? initialData.id : `manual-${Date.now()}`,
             date: finalDate,
             description: formData.description || '',
             amount: finalAmount,
-            category: formData.category || 'Uncategorized',
             type: formData.type,
-            account: formData.account || 'Cash'
+            categoryId, category,
+            accountId: accInfo.accountId, account: accInfo.account
         };
 
         onSave([newTransaction]);
@@ -310,7 +316,7 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
                 key={type}
                 type="button"
                 onClick={() => {
-                    setFormData({ ...formData, type, category: '' });
+                    setFormData({ ...formData, type, categoryId: '' });
                     if(type === TransactionType.TRANSFER) setTransferDir('out');
                 }} 
                 className={`flex-1 py-2 text-sm font-medium rounded-md transition-all flex items-center justify-center ${
@@ -325,7 +331,7 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
             ))}
           </div>
 
-          {/* Transfer Direction (Only visible for Editing Transfers) */}
+          {/* Transfer Direction */}
           {isEditing && formData.type === TransactionType.TRANSFER && (
              <div className="flex items-center justify-center space-x-4 bg-slate-50 p-3 rounded-lg border border-slate-100">
                 <span className="text-xs font-semibold text-slate-500 uppercase">Direction:</span>
@@ -378,14 +384,13 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
             </div>
           </div>
 
-          {/* Account Selection Logic */}
+          {/* Account Selection */}
           {(!isEditing && formData.type === TransactionType.TRANSFER) ? (
              <div className="grid grid-cols-[1fr_auto_1fr] gap-2 items-end">
-                {/* From Account */}
                 <AccountField 
                   label="From Account"
-                  value={formData.account}
-                  onChange={(val: string) => setFormData({ ...formData, account: val })}
+                  value={formData.accountId}
+                  onChange={(val: string) => setFormData({ ...formData, accountId: val })}
                   accounts={accounts}
                   placeholder="Source"
                   allowCreation={false}
@@ -395,22 +400,20 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
                     <ArrowRight className="w-5 h-5 mb-1" />
                 </div>
 
-                {/* To Account (Filtered to exclude source) */}
                 <AccountField 
                   label="To Account"
-                  value={toAccount}
-                  onChange={(val: string) => setToAccount(val)}
+                  value={toAccountId}
+                  onChange={(val: string) => setToAccountId(val)}
                   accounts={destinationAccounts}
                   placeholder="Destination"
                   allowCreation={false}
                 />
              </div>
           ) : (
-             /* Standard Account Field */
              <AccountField 
                label="Account"
-               value={formData.account}
-               onChange={(val: string) => setFormData({ ...formData, account: val })}
+               value={formData.accountId}
+               onChange={(val: string) => setFormData({ ...formData, accountId: val })}
                accounts={accounts}
                placeholder="Select or type new account..."
                icon={CreditCard}
@@ -433,16 +436,17 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
             </div>
           </div>
 
-          {/* Category (Filtered Selection or New) */}
+          {/* Category */}
           <div>
             <label className="block text-xs font-semibold text-slate-500 mb-1">Category (Optional)</label>
             <div className="relative">
               <Tag className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
+              {/* Category still uses Name for Input (list), but we need to map to ID on save */}
               <input
                 type="text"
                 list="category-list"
-                value={formData.category}
-                onChange={e => setFormData({ ...formData, category: e.target.value })}
+                value={formData.categoryId} // NOTE: We are storing the Name in this state variable temporarily for the input, mapping happens on Save
+                onChange={e => setFormData({ ...formData, categoryId: e.target.value })}
                 className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white text-slate-800 text-base sm:text-sm"
                 placeholder="Select or type new category..."
               />

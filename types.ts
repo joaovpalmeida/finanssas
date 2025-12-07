@@ -25,9 +25,16 @@ export interface Transaction {
   date: string;
   description: string;
   amount: number;
+  
+  // Foreign Keys
+  categoryId: string;
+  accountId: string;
+
+  // Display Names (Populated via JOINs)
   category: string;
-  type: TransactionType;
   account: string;
+  
+  type: TransactionType;
   balanceAfterTransaction?: number;
 }
 
@@ -52,7 +59,7 @@ export interface SavingsGoal {
   name: string;
   targetAmount: number;
   deadline: string;
-  targetAccounts: string[];
+  targetAccounts: string[]; // Stores Account IDs
 }
 
 export interface SearchFilters {

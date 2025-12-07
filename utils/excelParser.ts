@@ -147,9 +147,6 @@ export const parseExcelFile = (
       try {
         const data = e.target?.result;
         
-        // CRITICAL: For CSV files, use raw: true.
-        // This prevents the library from guessing types and auto-parsing "38,30" as 3830 (thousands separator)
-        // or dates in US format. We want raw text so our parseNumber logic applies.
         const isCSV = file.name.toLowerCase().endsWith('.csv');
         const workbook = XLSX.read(data, { type: 'binary', raw: isCSV });
         
@@ -168,7 +165,6 @@ export const parseExcelFile = (
             return;
         }
 
-        // Helper to safely parse int
         const getIdx = (val: string | undefined) => (val && val !== '' && !isNaN(parseInt(val))) ? parseInt(val) : -1;
 
         // Common indices
@@ -224,7 +220,6 @@ export const parseExcelFile = (
                    
                    // Try specific format parsing if defined
                    if (mapping?.dateFormat && mapping.dateFormat !== '') {
-                       // Match numbers in the string
                        const parts = val.match(/(\d+)/g);
                        if (parts && parts.length >= 3) {
                            const nums = parts.map(Number);
@@ -239,16 +234,13 @@ export const parseExcelFile = (
                            }
                            
                            if (y !== undefined && m !== undefined && d !== undefined) {
-                               // Handle 2 digit years (naive assumption: 2000+)
                                if (y < 100) y += 2000; 
-                               
                                const date = new Date(y, m - 1, d);
                                if (!isNaN(date.getTime())) return date.toISOString();
                            }
                        }
                    }
 
-                   // Fallback to standard parsing
                    const d = new Date(val);
                    if (!isNaN(d.getTime())) return d.toISOString();
                 }
@@ -256,18 +248,13 @@ export const parseExcelFile = (
             return fallbackDateStr;
         };
 
-        // Helper to parse numbers based on separator settings
         const parseNumber = (val: any): number => {
             if (val === undefined || val === null) return NaN;
-            
-            // If already a number, return it. 
-            // Note: If XLSX mis-parsed "38,30" as 3830 (thousands sep), we are stuck with it unless we used raw: true above.
             if (typeof val === 'number') return val;
             
             let str = String(val).trim();
             if (str === '') return NaN;
 
-            // Handle parentheses for negative numbers: (123.45) -> -123.45
             let isNegative = false;
             if (str.startsWith('(') && str.endsWith(')')) {
                 isNegative = true;
@@ -275,39 +262,18 @@ export const parseExcelFile = (
             }
 
             const separator = mapping?.decimalSeparator || '.';
-
-            // 1. Remove standard whitespace and non-breaking spaces
             str = str.replace(/[\s\u00A0]/g, '');
 
             if (separator === ',') {
-                // European: 1.234,56 -> 1234.56
-                
-                // 2. Remove dots (explicit thousands separator for this locale)
                 str = str.replace(/\./g, '');
-                
-                // 3. Remove anything that is not digit, minus, or the decimal comma
                 str = str.replace(/[^0-9,-]/g, '');
-                
-                // 4. Replace the decimal comma with a dot for JS parsing
                 str = str.replace(/,/g, '.');
             } else {
-                // US/Standard: 1,234.56 -> 1234.56
-                
-                // HEURISTIC CHECK for "38,30" case when user forgot to switch to Comma mode:
-                // If the string contains a comma, NO dots, and looks like "digits,digits", 
-                // and especially if only 1 or 2 digits follow the comma, treat it as decimal.
-                // E.g. "38,30" -> treat as 38.30
-                // E.g. "1,234" -> treat as 1234 (standard thousands)
                 const simpleCommaDecimalMatch = str.match(/^-?\d+,(\d{1,2})$/);
-                
                 if (simpleCommaDecimalMatch) {
-                    // Treat as decimal comma despite the setting
                     str = str.replace(/,/g, '.');
                 } else {
-                    // Standard Dot Decimal behavior
-                    // 2. Remove commas (explicit thousands separator for this locale)
                     str = str.replace(/,/g, '');
-                    // 3. Remove anything that is NOT a digit, minus sign, or the decimal dot
                     str = str.replace(/[^0-9.-]/g, '');
                 }
             }
@@ -316,11 +282,9 @@ export const parseExcelFile = (
             if (isNegative && !isNaN(result)) {
                 result = -Math.abs(result);
             }
-            
             return result;
         };
 
-        // Helper function to create transaction
         const createTxn = (
           row: any[], 
           amount: number, 
@@ -330,8 +294,6 @@ export const parseExcelFile = (
           rowIndex: number,
           specificManualCategory?: string
         ) => {
-            // Determine Description
-            // Priority: Specific Column -> Common Column -> Manual Value -> 'Unspecified'
             let description = 'Unspecified';
             if (specificDescIdx !== -1 && row[specificDescIdx]) {
                 description = String(row[specificDescIdx]);
@@ -341,8 +303,6 @@ export const parseExcelFile = (
                 description = mapping.manualDescription;
             }
 
-            // Determine Category
-            // Priority: Specific Column -> Specific Manual -> Common Column -> Common Manual -> 'Uncategorized'
             let category = 'Uncategorized';
             if (specificCatIdx !== -1 && row[specificCatIdx]) {
                 category = String(row[specificCatIdx]);
@@ -360,17 +320,14 @@ export const parseExcelFile = (
                 description: description,
                 amount: amount,
                 category: category,
+                categoryId: '', // Placeholder, will be resolved by DB Insert
                 type: type,
-                account: (accountIndex !== -1 && row[accountIndex]) ? String(row[accountIndex]) : defaultAccountName
+                account: (accountIndex !== -1 && row[accountIndex]) ? String(row[accountIndex]) : defaultAccountName,
+                accountId: '' // Placeholder, will be resolved by DB Insert
             };
         };
 
-        // --- PROCESSING ---
-
         if (hasSplitAmount) {
-            // SPLIT MODE: Process Income and Expenses separately with their own ranges
-            
-            // 1. Process Income
             if (incomeIndex !== -1) {
                 const start = (mapping?.incomeStartRow || mapping?.startRow || 2) - 1;
                 const end = (mapping?.incomeEndRow || mapping?.endRow || jsonData.length);
@@ -383,7 +340,6 @@ export const parseExcelFile = (
                     if (rawVal !== undefined) {
                          const val = parseNumber(rawVal);
                          if (!isNaN(val) && val !== 0) {
-                             // Income is always positive absolute value
                              transactions.push(createTxn(
                                row, 
                                Math.abs(val), 
@@ -398,7 +354,6 @@ export const parseExcelFile = (
                 }
             }
 
-            // 2. Process Expenses
             if (expenseIndex !== -1) {
                 const start = (mapping?.expenseStartRow || mapping?.startRow || 2) - 1;
                 const end = (mapping?.expenseEndRow || mapping?.endRow || jsonData.length);
@@ -411,7 +366,6 @@ export const parseExcelFile = (
                     if (rawVal !== undefined) {
                          const val = parseNumber(rawVal);
                          if (!isNaN(val) && val !== 0) {
-                             // Expense is always negative absolute value
                              transactions.push(createTxn(
                                row, 
                                -Math.abs(val), 
@@ -427,7 +381,6 @@ export const parseExcelFile = (
             }
 
         } else {
-            // SINGLE AMOUNT MODE
             if (amountIndex === -1) {
                  reject(new Error("No Amount column mapped."));
                  return;
