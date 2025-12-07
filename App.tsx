@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, Suspense } from 'react';
-import { Wallet, Loader2, Plus, Settings, Target, Search, Home, Menu, X, BarChart3, Sparkles } from 'lucide-react';
+import { Wallet, Loader2, Plus, Settings, Target, Search, Home, Menu, X, BarChart3, Sparkles, HelpCircle } from 'lucide-react';
 import { Transaction, Account, Category } from './types';
 import { initDB, insertTransactions, getAllTransactions, resetDB, exportDatabaseBlob, deleteTransaction, getAccounts, getCategories, importDatabase } from './services/db';
 import { calculateRunningBalances, aggregateData } from './utils/helpers';
@@ -13,6 +13,7 @@ const SavingsGoals = React.lazy(() => import('./components/SavingsGoals').then(m
 const LandingPage = React.lazy(() => import('./components/LandingPage').then(module => ({ default: module.LandingPage })));
 const TransactionSearch = React.lazy(() => import('./components/TransactionSearch').then(module => ({ default: module.TransactionSearch })));
 const AddTransactionModal = React.lazy(() => import('./components/AddTransactionModal').then(module => ({ default: module.AddTransactionModal })));
+const HelpPage = React.lazy(() => import('./components/HelpPage').then(module => ({ default: module.HelpPage })));
 
 // Loading Fallback Component
 const PageLoader = () => (
@@ -32,7 +33,7 @@ function App() {
   const [error, setError] = useState<string | null>(null);
   
   // 'landing' is now the default
-  const [activeTab, setActiveTab] = useState<'landing' | 'dashboard' | 'search' | 'insights' | 'savings' | 'admin'>('landing');
+  const [activeTab, setActiveTab] = useState<'landing' | 'dashboard' | 'search' | 'insights' | 'savings' | 'admin' | 'help'>('landing');
   
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Partial<Transaction> | null>(null);
@@ -148,6 +149,7 @@ function App() {
     { id: 'insights', label: 'AI Insights', icon: Sparkles },
     { id: 'savings', label: 'Goals', icon: Target },
     { id: 'admin', label: 'Admin', icon: Settings },
+    { id: 'help', label: 'Help', icon: HelpCircle },
   ] as const;
 
   if (!isDbReady) {
@@ -309,6 +311,7 @@ function App() {
                 uploadError={error}
               />
             )}
+            {activeTab === 'help' && <HelpPage />}
           </div>
         </Suspense>
       </main>
