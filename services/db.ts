@@ -193,132 +193,188 @@ export const getExistingSignatures = (): Set<string> => {
 export const generateDummyData = async () => {
   if (!db) return;
 
-  const accounts = ['Main Checking', 'Savings', 'Visa Card'];
-  const categories = [
-    { name: 'Salary', type: TransactionType.INCOME, group: 'Recurring' },
-    { name: 'Rent', type: TransactionType.EXPENSE, group: 'Recurring' },
-    { name: 'Utilities', type: TransactionType.EXPENSE, group: 'Recurring' },
-    { name: 'Internet', type: TransactionType.EXPENSE, group: 'Recurring' },
-    { name: 'Groceries', type: TransactionType.EXPENSE, group: 'General' },
-    { name: 'Dining Out', type: TransactionType.EXPENSE, group: 'General' },
-    { name: 'Transport', type: TransactionType.EXPENSE, group: 'General' },
-    { name: 'Entertainment', type: TransactionType.EXPENSE, group: 'General' },
-    { name: 'Shopping', type: TransactionType.EXPENSE, group: 'General' },
-    { name: 'Freelance', type: TransactionType.INCOME, group: 'General' },
-    { name: 'Transfer', type: TransactionType.TRANSFER, group: 'General' },
-  ];
-
-  const transactions: Transaction[] = [];
-  const today = new Date();
-  
-  for (let i = 0; i < 90; i++) {
-    const date = new Date(today);
-    date.setDate(date.getDate() - i);
-    const dateStr = date.toISOString();
-    const day = date.getDate();
-
-    if (day === 1) {
-        transactions.push({
-            id: `dummy-rent-${i}`,
-            date: dateStr,
-            description: 'Monthly Rent',
-            amount: -1200,
-            category: 'Rent',
-            categoryId: '', // Resolved on insert
-            type: TransactionType.EXPENSE,
-            account: 'Main Checking',
-            accountId: '' // Resolved on insert
-        });
-    }
-    if (day === 28) {
-        transactions.push({
-            id: `dummy-salary-${i}`,
-            date: dateStr,
-            description: 'Monthly Salary',
-            amount: 3500,
-            category: 'Salary',
-            categoryId: '',
-            type: TransactionType.INCOME,
-            account: 'Main Checking',
-            accountId: ''
-        });
-    }
-    if (day === 15) {
-        transactions.push({
-            id: `dummy-utils-${i}`,
-            date: dateStr,
-            description: 'Electric & Internet',
-            amount: -150,
-            category: 'Utilities',
-            categoryId: '',
-            type: TransactionType.EXPENSE,
-            account: 'Main Checking',
-            accountId: ''
-        });
-    }
-    if (day === 2) {
-        transactions.push({
-            id: `dummy-tr-out-${i}`,
-            date: dateStr,
-            description: 'Transfer to Savings',
-            amount: -800,
-            category: 'Transfer',
-            categoryId: '',
-            type: TransactionType.TRANSFER,
-            account: 'Main Checking',
-            accountId: ''
-        });
-        transactions.push({
-            id: `dummy-tr-in-${i}`,
-            date: dateStr,
-            description: 'Transfer from Checking',
-            amount: 800,
-            category: 'Transfer',
-            categoryId: '',
-            type: TransactionType.TRANSFER,
-            account: 'Savings',
-            accountId: ''
-        });
-    }
-    if (Math.random() > 0.6) {
-        transactions.push({
-            id: `dummy-groc-${i}`,
-            date: dateStr,
-            description: 'Supermarket Purchase',
-            amount: -(Math.floor(Math.random() * 80) + 20),
-            category: 'Groceries',
-            categoryId: '',
-            type: TransactionType.EXPENSE,
-            account: Math.random() > 0.5 ? 'Main Checking' : 'Visa Card',
-            accountId: ''
-        });
-    }
-    if (Math.random() > 0.7) {
-        transactions.push({
-            id: `dummy-dine-${i}`,
-            date: dateStr,
-            description: 'Restaurant / Cafe',
-            amount: -(Math.floor(Math.random() * 60) + 10),
-            category: 'Dining Out',
-            categoryId: '',
-            type: TransactionType.EXPENSE,
-            account: 'Visa Card',
-            accountId: ''
-        });
-    }
-  }
-
-  await insertTransactions(transactions);
-
-  // Manually update groups/savings flag for dummy data
   db.run("BEGIN TRANSACTION");
-  categories.forEach(c => {
-    // Only update if it exists (insertTransactions should have created them)
-    db.run("UPDATE categories SET group_name = ? WHERE name = ? AND type = ?", [c.group, c.name, c.type]);
-  });
-  db.run("UPDATE accounts SET is_savings = 1 WHERE name = 'Savings'");
-  db.run("COMMIT");
-  await saveDB();
+
+  try {
+    // 1. Setup Accounts and Categories with Explicit IDs
+    const accountsData = [
+        { name: 'Main Checking', isSavings: 0 },
+        { name: 'Savings', isSavings: 1 },
+        { name: 'Credit Card', isSavings: 0 }
+    ];
+
+    const categoriesData = [
+        { name: 'Salary', type: 'Income', group: 'Recurring' },
+        { name: 'Freelance', type: 'Income', group: 'General' },
+        { name: 'Rent', type: 'Expense', group: 'Recurring' },
+        { name: 'Utilities', type: 'Expense', group: 'Recurring' },
+        { name: 'Internet', type: 'Expense', group: 'Recurring' },
+        { name: 'Groceries', type: 'Expense', group: 'General' },
+        { name: 'Dining Out', type: 'Expense', group: 'General' },
+        { name: 'Transport', type: 'Expense', group: 'General' },
+        { name: 'Entertainment', type: 'Expense', group: 'General' },
+        { name: 'Shopping', type: 'Expense', group: 'General' },
+        { name: 'Health', type: 'Expense', group: 'General' },
+        { name: 'Transfer', type: 'Transfer', group: 'General' }
+    ];
+
+    // Resolve Account IDs (Create if not exist)
+    const accountIds: Record<string, string> = {};
+    for (const acc of accountsData) {
+        const res = db.exec("SELECT id FROM accounts WHERE name = ?", [acc.name]);
+        if (res.length > 0) {
+            accountIds[acc.name] = res[0].values[0][0] as string;
+        } else {
+            const newId = `acc-dummy-${Date.now()}-${Math.floor(Math.random()*100000)}`;
+            db.run("INSERT INTO accounts (id, name, is_savings) VALUES (?, ?, ?)", [newId, acc.name, acc.isSavings]);
+            accountIds[acc.name] = newId;
+        }
+    }
+
+    // Resolve Category IDs (Create if not exist)
+    const categoryIds: Record<string, string> = {}; // Key: "Name:Type"
+    for (const cat of categoriesData) {
+        const res = db.exec("SELECT id FROM categories WHERE name = ? AND type = ?", [cat.name, cat.type]);
+        if (res.length > 0) {
+            categoryIds[`${cat.name}:${cat.type}`] = res[0].values[0][0] as string;
+        } else {
+            const newId = `cat-dummy-${Date.now()}-${Math.floor(Math.random()*100000)}`;
+            db.run("INSERT INTO categories (id, name, type, group_name) VALUES (?, ?, ?, ?)", [newId, cat.name, cat.type, cat.group]);
+            categoryIds[`${cat.name}:${cat.type}`] = newId;
+        }
+    }
+
+    // 2. Generate Transactions (12 Months)
+    const transactions = [];
+    const endDate = new Date();
+    const startDate = new Date();
+    startDate.setMonth(startDate.getMonth() - 12);
+    
+    // Helpers
+    const randInt = (min: number, max: number) => Math.floor(Math.random() * (max - min + 1)) + min;
+    
+    let currentDate = new Date(startDate);
+    
+    while (currentDate <= endDate) {
+        const dateStr = currentDate.toISOString();
+        const day = currentDate.getDate();
+        const weekDay = currentDate.getDay(); // 0 = Sun, 6 = Sat
+        const isWeekend = weekDay === 0 || weekDay === 6;
+
+        // --- Monthly Recurring ---
+        if (day === 1) {
+            transactions.push({
+                date: dateStr,
+                desc: 'Monthly Rent', amount: -1200, cat: 'Rent', type: 'Expense', acc: 'Main Checking'
+            });
+        }
+        if (day === 5) {
+            transactions.push({
+                date: dateStr,
+                desc: 'Internet Bill', amount: -60, cat: 'Internet', type: 'Expense', acc: 'Main Checking'
+            });
+        }
+        if (day === 15) {
+            transactions.push({
+                date: dateStr,
+                desc: 'Electric & Water', amount: -randInt(120, 180), cat: 'Utilities', type: 'Expense', acc: 'Main Checking'
+            });
+        }
+        if (day === 28) {
+            transactions.push({
+                date: dateStr,
+                desc: 'Salary', amount: 4500, cat: 'Salary', type: 'Income', acc: 'Main Checking'
+            });
+            // Auto Transfer to Savings
+            transactions.push({
+                date: dateStr,
+                desc: 'Savings Contribution', amount: -1000, cat: 'Transfer', type: 'Transfer', acc: 'Main Checking'
+            });
+            transactions.push({
+                date: dateStr,
+                desc: 'Savings Contribution', amount: 1000, cat: 'Transfer', type: 'Transfer', acc: 'Savings'
+            });
+        }
+
+        // --- Daily/Weekly Variable ---
+        
+        // Groceries (Every ~4 days)
+        if (Math.random() > 0.75) {
+             transactions.push({
+                date: dateStr,
+                desc: 'Supermarket', amount: -randInt(40, 150), cat: 'Groceries', type: 'Expense', acc: 'Main Checking'
+            });
+        }
+
+        // Dining Out (More on weekends)
+        if ((isWeekend && Math.random() > 0.3) || (!isWeekend && Math.random() > 0.8)) {
+             transactions.push({
+                date: dateStr,
+                desc: 'Restaurant / Cafe', amount: -randInt(15, 60), cat: 'Dining Out', type: 'Expense', acc: 'Credit Card'
+            });
+        }
+
+        // Transport
+        if (!isWeekend && Math.random() > 0.6) {
+             transactions.push({
+                date: dateStr,
+                desc: 'Uber / Public Transport', amount: -randInt(10, 30), cat: 'Transport', type: 'Expense', acc: 'Credit Card'
+            });
+        }
+
+        // Random Shopping
+        if (day % 10 === 0 && Math.random() > 0.5) {
+             transactions.push({
+                date: dateStr,
+                desc: 'Amazon / Online Store', amount: -randInt(30, 150), cat: 'Shopping', type: 'Expense', acc: 'Credit Card'
+            });
+        }
+
+        // Random Freelance Income
+        if (day % 14 === 0 && Math.random() > 0.7) {
+             transactions.push({
+                date: dateStr,
+                desc: 'Freelance Project', amount: randInt(200, 800), cat: 'Freelance', type: 'Income', acc: 'Main Checking'
+            });
+        }
+
+        // Next Day
+        currentDate.setDate(currentDate.getDate() + 1);
+    }
+
+    // 3. Batch Insert
+    const stmt = db.prepare(`
+        INSERT INTO transactions (id, date, description, amount, category_id, account_id, type)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    for (const t of transactions) {
+        const catKey = `${t.cat}:${t.type}`;
+        const catId = categoryIds[catKey];
+        const accId = accountIds[t.acc];
+
+        if (catId && accId) {
+            stmt.run([
+                `txn-dummy-${Date.now()}-${Math.random().toString(36).substring(2, 10)}`,
+                t.date || currentDate.toISOString(), 
+                t.desc,
+                t.amount,
+                catId,
+                accId,
+                t.type
+            ]);
+        }
+    }
+    stmt.free();
+
+    db.run("COMMIT");
+    await saveDB();
+
+  } catch (e) {
+    console.error("Dummy generation failed", e);
+    db.run("ROLLBACK");
+    throw e;
+  }
 };
 
 // --- Transactions ---
