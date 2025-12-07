@@ -550,6 +550,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, 
                     : null;
                 
                 const showHeader = dateStr !== prevDateStr;
+                const isPositiveBalance = t.type === 'Balance' && t.amount >= 0;
 
                 return (
                   <React.Fragment key={t.id}>
@@ -572,8 +573,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ transactions, categories, 
                       </td>
                       <td className="px-4 sm:px-6 py-3 text-right whitespace-nowrap">
                         <div className="flex flex-col items-end gap-0.5">
-                          <span className={`font-semibold ${t.type === 'Income' ? 'text-emerald-600' : 'text-slate-800'}`}>
-                            {t.type === 'Income' ? '+' : ''}{formatCurrency(t.amount)}
+                          <span className={`font-semibold ${t.type === 'Income' || isPositiveBalance ? 'text-emerald-600' : 'text-slate-800'}`}>
+                            {t.type === 'Income' || isPositiveBalance ? '+' : ''}{formatCurrency(t.amount)}
                           </span>
                           {t.balanceAfterTransaction !== undefined && (
                             <span className="text-xs text-slate-400 font-medium">

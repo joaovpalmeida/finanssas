@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useId } from 'react';
-import { X, Save, Calendar, Tag, CreditCard, DollarSign, Type, ArrowRightLeft, ArrowUpCircle, ArrowDownCircle, ArrowRight, ChevronDown, List, Plus } from 'lucide-react';
+import { X, Save, Calendar, Tag, CreditCard, DollarSign, Type, ArrowRightLeft, ArrowUpCircle, ArrowDownCircle, ArrowRight, ChevronDown, List, Plus, Scale } from 'lucide-react';
 import { Transaction, TransactionType, Category, Account } from '../types';
 
 interface AddTransactionModalProps {
@@ -219,12 +219,6 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
         return { categoryId: '', category: val };
     };
 
-    if (formData.type === TransactionType.TRANSFER) {
-        // Validation for existing accounts
-        // We assume transfers only between existing accounts for simplicity in ID mode, 
-        // OR standard creation logic if typed new.
-    }
-
     let finalDate: string;
     if (!isEditing) {
         const now = new Date();
@@ -276,6 +270,7 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
         if (formData.type === TransactionType.EXPENSE) finalAmount = -Math.abs(finalAmount);
         else if (formData.type === TransactionType.INCOME) finalAmount = Math.abs(finalAmount);
         else if (formData.type === TransactionType.TRANSFER) finalAmount = transferDir === 'out' ? -Math.abs(finalAmount) : Math.abs(finalAmount);
+        else if (formData.type === TransactionType.BALANCE) finalAmount = Math.abs(finalAmount); // Default positive for adjustment, unless user explicitly types negative (which input might restrict depending on UX, but here we assume add balance)
 
         const accInfo = resolveAccountPayload(formData.accountId);
 
@@ -311,7 +306,7 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
           
           {/* Type Selection */}
           <div className="flex bg-slate-100 p-1 rounded-lg">
-            {[TransactionType.EXPENSE, TransactionType.INCOME, TransactionType.TRANSFER].map((type) => (
+            {[TransactionType.EXPENSE, TransactionType.INCOME, TransactionType.TRANSFER, TransactionType.BALANCE].map((type) => (
               <button
                 key={type}
                 type="button"
@@ -319,13 +314,14 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
                     setFormData({ ...formData, type, categoryId: '' });
                     if(type === TransactionType.TRANSFER) setTransferDir('out');
                 }} 
-                className={`flex-1 py-2 text-sm font-medium rounded-md transition-all flex items-center justify-center ${
+                className={`flex-1 py-2 text-xs sm:text-sm font-medium rounded-md transition-all flex items-center justify-center ${
                   formData.type === type 
                     ? 'bg-white text-blue-600 shadow-sm' 
                     : 'text-slate-500 hover:text-slate-700'
                 }`}
               >
-                {type === TransactionType.TRANSFER && <ArrowRightLeft className="w-3 h-3 mr-1.5" />}
+                {type === TransactionType.TRANSFER && <ArrowRightLeft className="w-3 h-3 mr-1 hidden sm:block" />}
+                {type === TransactionType.BALANCE && <Scale className="w-3 h-3 mr-1 hidden sm:block" />}
                 {type}
               </button>
             ))}
@@ -441,11 +437,10 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
             <label className="block text-xs font-semibold text-slate-500 mb-1">Category (Optional)</label>
             <div className="relative">
               <Tag className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
-              {/* Category still uses Name for Input (list), but we need to map to ID on save */}
               <input
                 type="text"
                 list="category-list"
-                value={formData.categoryId} // NOTE: We are storing the Name in this state variable temporarily for the input, mapping happens on Save
+                value={formData.categoryId}
                 onChange={e => setFormData({ ...formData, categoryId: e.target.value })}
                 className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white text-slate-800 text-base sm:text-sm"
                 placeholder="Select or type new category..."

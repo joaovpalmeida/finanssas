@@ -593,6 +593,7 @@ const CategoryList: React.FC<{
                 >
                     <option value="Expense">Expense</option>
                     <option value="Income">Income</option>
+                    <option value="Balance">Balance</option>
                 </select>
                 <select 
                 className="flex-1 text-xs border rounded p-1 bg-white text-slate-800"
@@ -629,6 +630,7 @@ const CategoryList: React.FC<{
 
   const incomeCategories = categories.filter(c => c.type === 'Income');
   const expenseCategories = categories.filter(c => c.type === 'Expense');
+  const balanceCategories = categories.filter(c => c.type === 'Balance');
 
   return (
      <div className="flex-1 flex flex-col min-h-0">
@@ -648,6 +650,7 @@ const CategoryList: React.FC<{
              >
                 <option value="Expense">Expense</option>
                 <option value="Income">Income</option>
+                <option value="Balance">Balance</option>
              </select>
              <select 
                 className="w-24 text-xs border rounded-lg px-2 py-2 bg-white text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none"
@@ -679,9 +682,17 @@ const CategoryList: React.FC<{
             <div className="sticky top-0 z-10 bg-red-50 px-4 py-2 border-y border-red-100 font-semibold text-xs text-red-700 uppercase tracking-wider">
                 Expense Categories
             </div>
-            <ul className="divide-y divide-slate-100">
+            <ul className="divide-y divide-slate-100 mb-2">
                 {expenseCategories.map(renderCategoryItem)}
                 {expenseCategories.length === 0 && <li className="p-4 text-center text-slate-400 text-xs">No expense categories</li>}
+            </ul>
+
+            <div className="sticky top-0 z-10 bg-blue-50 px-4 py-2 border-y border-blue-100 font-semibold text-xs text-blue-700 uppercase tracking-wider">
+                Balance / Adjustment Categories
+            </div>
+            <ul className="divide-y divide-slate-100">
+                {balanceCategories.map(renderCategoryItem)}
+                {balanceCategories.length === 0 && <li className="p-4 text-center text-slate-400 text-xs">No balance categories</li>}
             </ul>
         </div>
      </div>

@@ -177,6 +177,8 @@ export const TransactionSearch: React.FC<TransactionSearchProps> = ({ categories
                 <option value="">All Types</option>
                 <option value="Income">Income</option>
                 <option value="Expense">Expense</option>
+                <option value="Transfer">Transfer</option>
+                <option value="Balance">Balance</option>
              </select>
            </div>
            
