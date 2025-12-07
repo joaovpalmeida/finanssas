@@ -198,6 +198,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                 isLoading={isUploading}
                 error={uploadError}
                 categories={categories}
+                accounts={accounts}
                 defaultDateFormat={dateFormat}
                 defaultDecimalSeparator={decimalSeparator}
               />

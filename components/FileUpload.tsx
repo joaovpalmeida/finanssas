@@ -1,7 +1,7 @@
 import React, { useCallback, useState, useMemo, useEffect } from 'react';
-import { Upload, FileSpreadsheet, Loader2, AlertCircle, ArrowRight, Settings, Layers, ChevronRight, ArrowLeft, Table, Calendar, Columns, ArrowDownToLine, ArrowUpFromLine, Eye, Type, Tag, CheckSquare, Square, AlertTriangle, Edit2, Copy, X, Sparkles } from 'lucide-react';
+import { Upload, FileSpreadsheet, Loader2, AlertCircle, ArrowRight, Settings, Layers, ChevronRight, ArrowLeft, Table, Calendar, Columns, ArrowDownToLine, ArrowUpFromLine, Eye, Type, Tag, CheckSquare, Square, AlertTriangle, Edit2, Copy, X, Sparkles, List } from 'lucide-react';
 import { getExcelColumns, getExcelSheetNames, parseExcelFile, ColumnMapping, ExcelColumn } from '../utils/excelParser';
-import { Transaction, Category } from '../types';
+import { Transaction, Category, Account } from '../types';
 import { formatCurrency, generateTransactionSignature } from '../utils/helpers';
 import { getExistingSignatures, saveImportConfig, getImportConfig, getCategorySuggestions } from '../services/db';
 
@@ -10,6 +10,7 @@ interface FileUploadProps {
   isLoading: boolean;
   error?: string | null;
   categories: Category[];
+  accounts: Account[];
   defaultDateFormat?: string;
   defaultDecimalSeparator?: '.' | ',';
 }
@@ -26,11 +27,12 @@ export const FileUpload: React.FC<FileUploadProps> = ({
   isLoading, 
   error, 
   categories,
+  accounts,
   defaultDateFormat,
   defaultDecimalSeparator 
 }) => {
   const [isDragging, setIsDragging] = useState(false);
-  const [accountName, setAccountName] = useState('Main Account');
+  const [accountName, setAccountName] = useState(accounts.length > 0 ? accounts[0].name : 'Main Account');
   const [defaultDate, setDefaultDate] = useState(new Date().toISOString().split('T')[0]);
   
   const [step, setStep] = useState<'upload' | 'sheet-selection' | 'mapping' | 'preview'>('upload');
@@ -751,7 +753,8 @@ export const FileUpload: React.FC<FileUploadProps> = ({
            </button>
         </div>
 
-        <div className="space-y-6 mb-8 h-96 overflow-y-auto pr-2 custom-scrollbar">
+        {/* Added bottom padding pb-24 to prevent footer hiding elements */}
+        <div className="space-y-6 mb-8 h-96 overflow-y-auto pr-2 custom-scrollbar pb-24">
           
           {/* Section: Common Fields */}
           <div className="space-y-4">
@@ -815,7 +818,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({
                         "Category", 
                         mapping.category, 
                         v => setMapping({...mapping, category: v}),
-                        mapping.manualCategory,
+                        mapping.manualCategory, 
                         v => setMapping({...mapping, manualCategory: v}),
                         <Tag className="w-3 h-3"/>
                     )}
@@ -924,7 +927,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({
           {/* Section: Account */}
           <div className="space-y-4">
              <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100 pb-2">Account Assignment</h4>
-             <div className="flex gap-4">
+             <div className="flex gap-4 items-center">
                  <div className="flex-1">
                    <select 
                      value={mapping.account || ''}
@@ -939,14 +942,22 @@ export const FileUpload: React.FC<FileUploadProps> = ({
                      ))}
                    </select>
                  </div>
-                 <input 
-                    type="text"
-                    value={accountName}
-                    onChange={(e) => setAccountName(e.target.value)}
-                    placeholder="Default Name (e.g. Chase)"
-                    className="flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white text-base sm:text-sm"
-                    disabled={!!mapping.account}
-                 />
+                 <div className="flex-1">
+                   <input 
+                        type="text"
+                        list="account-suggestions"
+                        value={accountName}
+                        onChange={(e) => setAccountName(e.target.value)}
+                        placeholder="Target Account Name"
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white text-base sm:text-sm"
+                        disabled={!!mapping.account}
+                   />
+                   <datalist id="account-suggestions">
+                        {accounts.map(a => (
+                            <option key={a.id} value={a.name} />
+                        ))}
+                   </datalist>
+                 </div>
              </div>
           </div>
         </div>
