@@ -1,12 +1,8 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { 
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
-  PieChart, Pie, Cell, Legend
-} from 'recharts';
-import { 
-  TrendingUp, TrendingDown, DollarSign, CreditCard, Wallet, Edit2, Trash2,
-  ChevronDown, ChevronUp, BarChart3, Layers, ArrowRight, Calendar, Filter, ChevronLeft, ChevronRight,
-  Eye, EyeOff, Info, PiggyBank, PieChart as PieIcon, Percent
+  TrendingUp, TrendingDown, CreditCard, Wallet, Edit2, Trash2,
+  ChevronDown, ChevronUp, BarChart3, Calendar, Filter, ChevronLeft, ChevronRight,
+  Eye, EyeOff, Info, PiggyBank, Percent, ArrowRight
 } from 'lucide-react';
 import { Transaction, FinancialSummary, Category, TransactionType, Account, FiscalConfig } from '../types';
 import { formatCurrency, aggregateData, getMonthYearLabel, getFiscalDateRange } from '../utils/helpers';
@@ -24,14 +20,6 @@ interface DashboardProps {
 }
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#6366f1', '#14b8a6'];
-
-// Map specific groups to colors
-const GROUP_COLOR_MAP: Record<string, string> = {
-  'Recurring': '#6366f1', // Indigo
-  'General': '#f43f5e',   // Rose
-  'Savings': '#10b981',   // Emerald
-};
-const FALLBACK_COLOR = '#94a3b8'; // Slate
 
 const StatCard: React.FC<{ 
   title: string; 
@@ -80,7 +68,6 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const [privacyMode, setPrivacyMode] = useState(true); // Default to true (hidden)
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
-  const [allocationView, setAllocationView] = useState<'group' | 'category'>('group');
   
   // Fiscal Config State
   const [fiscalConfig, setFiscalConfig] = useState<FiscalConfig>({ mode: 'calendar' });
@@ -248,36 +235,6 @@ export const Dashboard: React.FC<DashboardProps> = ({
     return Object.entries(groups).sort((a, b) => b[1].total - a[1].total);
   }, [statsTransactions, categories]);
 
-  // Calculate Structure Data
-  const structureData = useMemo(() => {
-    const data = [...periodSummary.expenseByGroup];
-    const savings = periodSummary.totalIncome - periodSummary.totalExpense;
-    if (savings > 0) {
-      data.push({ name: 'Savings', value: savings });
-    }
-    return data;
-  }, [periodSummary]);
-
-  // Calculate Category Allocation Data
-  const categoryAllocationData = useMemo(() => {
-    const data = periodSummary.topCategories.map(c => ({ name: c.name, value: c.value }));
-    const topSum = data.reduce((sum, item) => sum + item.value, 0);
-    const otherSum = periodSummary.totalExpense - topSum;
-    
-    if (otherSum > 0) {
-      data.push({ name: 'Others', value: otherSum });
-    }
-
-    const savings = periodSummary.totalIncome - periodSummary.totalExpense;
-    if (savings > 0) {
-      data.push({ name: 'Savings', value: savings });
-    }
-    
-    return data;
-  }, [periodSummary]);
-
-  const activeChartData = allocationView === 'group' ? structureData : categoryAllocationData;
-
   if (transactions.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[50vh] p-8 text-center bg-white rounded-2xl shadow-sm border border-slate-100">
@@ -434,65 +391,6 @@ export const Dashboard: React.FC<DashboardProps> = ({
       <div>
         {showCharts && (
           <div className="space-y-6 animate-fade-in">
-             <div className="grid grid-cols-1 gap-6">
-                {/* Expense Structure / Cash Flow Allocation */}
-                <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
-                  <div className="flex items-center justify-between mb-6">
-                    <h3 className="text-lg font-semibold text-slate-800 flex items-center">
-                      <PieIcon className="w-5 h-5 mr-2 text-indigo-500" />
-                      Cash Flow Allocation
-                    </h3>
-                    <div className="flex bg-slate-100 p-1 rounded-lg">
-                       <button
-                         onClick={() => setAllocationView('group')}
-                         className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${allocationView === 'group' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-                       >
-                         Group
-                       </button>
-                       <button
-                         onClick={() => setAllocationView('category')}
-                         className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${allocationView === 'category' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-                       >
-                         Category
-                       </button>
-                    </div>
-                  </div>
-                  <div className="h-72">
-                    {periodSummary.totalIncome > 0 || periodSummary.totalExpense > 0 ? (
-                      <ResponsiveContainer width="100%" height="100%">
-                        <PieChart>
-                          <Pie
-                            data={activeChartData}
-                            cx="50%"
-                            cy="50%"
-                            innerRadius={60}
-                            outerRadius={90}
-                            paddingAngle={5}
-                            dataKey="value"
-                          >
-                            {activeChartData.map((entry, index) => (
-                              <Cell 
-                                key={`cell-${index}`} 
-                                fill={allocationView === 'group' 
-                                  ? (GROUP_COLOR_MAP[entry.name] || FALLBACK_COLOR)
-                                  : (entry.name === 'Savings' ? '#10b981' : COLORS[index % COLORS.length])
-                                } 
-                              />
-                            ))}
-                          </Pie>
-                          <Tooltip formatter={(value) => privacyMode ? '••••••' : formatCurrency(value as number, decimalSeparator)} />
-                          <Legend verticalAlign="bottom" height={36}/>
-                        </PieChart>
-                      </ResponsiveContainer>
-                    ) : (
-                      <div className="flex items-center justify-center h-full text-slate-400 text-sm">
-                        No financial data for this period
-                      </div>
-                    )}
-                  </div>
-                </div>
-            </div>
-
             {/* Detailed Expense Breakdown */}
             <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
               <h3 className="text-lg font-semibold text-slate-800 mb-6">Expense Breakdown by Category</h3>
