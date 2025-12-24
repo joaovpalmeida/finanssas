@@ -72,35 +72,64 @@ export const Dashboard: React.FC<DashboardProps> = ({
   // Fiscal Config State
   const [fiscalConfig, setFiscalConfig] = useState<FiscalConfig>({ mode: 'calendar' });
 
-  // 2. Extract unique months for the dropdown history
-  const availableMonths = useMemo(() => {
-    const dates = new Set(transactions.map(t => {
-      const d = new Date(t.date);
-      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-    }));
-    const list = Array.from(dates).sort().reverse(); // Newest first
-    
-    // Ensure current month is always in the list
-    const currentMonthKey = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
-    if (!list.includes(currentMonthKey)) {
-        list.unshift(currentMonthKey);
-    }
-    return list;
-  }, [transactions]);
-
-  // Default filter to current month
-  const [dateFilter, setDateFilter] = useState<string>(
-      `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`
-  );
-
-  // Load privacy setting & fiscal config on mount
+  // Load fiscal config on mount
   useEffect(() => {
-    const savedPrivacy = getPrivacySetting();
-    setPrivacyMode(savedPrivacy);
-    
     const config = getFiscalConfig();
     setFiscalConfig(config);
+    const savedPrivacy = getPrivacySetting();
+    setPrivacyMode(savedPrivacy);
   }, []);
+
+  // 2. Extract unique periods for the dropdown
+  const availableMonths = useMemo(() => {
+    const dates = new Set<string>();
+    
+    transactions.forEach(t => {
+      const d = new Date(t.date);
+      const y = d.getFullYear();
+      const m = d.getMonth() + 1;
+      
+      // Add current calendar month
+      const currentKey = `${y}-${String(m).padStart(2, '0')}`;
+      dates.add(currentKey);
+
+      // Logical shift: if this transaction triggers the NEXT fiscal period, add that period too.
+      // For Fixed Day: if day >= startDay, it contributes to the next anchor month.
+      if (fiscalConfig.mode === 'fixed_day' && fiscalConfig.startDay && d.getDate() >= fiscalConfig.startDay) {
+        const nextDate = new Date(y, m, 1);
+        dates.add(`${nextDate.getFullYear()}-${String(nextDate.getMonth() + 1).padStart(2, '0')}`);
+      } 
+      // For Income Trigger: if this is the trigger category, it starts the next anchor month.
+      else if (fiscalConfig.mode === 'income_trigger' && fiscalConfig.triggerCategory && t.category === fiscalConfig.triggerCategory) {
+        const nextDate = new Date(y, m, 1);
+        dates.add(`${nextDate.getFullYear()}-${String(nextDate.getMonth() + 1).padStart(2, '0')}`);
+      }
+    });
+    
+    // If no transactions, fallback to current month only
+    if (dates.size === 0) {
+      const now = new Date();
+      dates.add(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`);
+    }
+
+    return Array.from(dates).sort().reverse(); // Newest first
+  }, [transactions, fiscalConfig]);
+
+  // Default filter to the first available period (usually current or latest with data)
+  const [dateFilter, setDateFilter] = useState<string>('all');
+
+  // Initialize date filter once availableMonths is ready
+  useEffect(() => {
+    const now = new Date();
+    const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    
+    // Default to current month if it exists in data, otherwise the first item (latest)
+    if (availableMonths.includes(currentMonthKey)) {
+        setDateFilter(currentMonthKey);
+    } else if (availableMonths.length > 0) {
+        setDateFilter(availableMonths[0]);
+    }
+  }, [availableMonths.length === 1 && availableMonths[0].split('-').length === 2]); // Initial load trigger
 
   // Handle privacy toggle and save
   const togglePrivacy = async () => {
@@ -115,30 +144,24 @@ export const Dashboard: React.FC<DashboardProps> = ({
   }, [dateFilter, transactions, itemsPerPage]);
 
   // 1. Calculate Date Range based on filter and Fiscal Config
-  // Added 'transactions' dependency to support 'income_trigger' mode which scans history
   const { start: dateStart, end: dateEnd, label: dateLabel } = useMemo(() => {
       return getFiscalDateRange(dateFilter, fiscalConfig, transactions);
   }, [dateFilter, fiscalConfig, transactions]);
 
   // Determine if the view is "Current"
   const isCurrentView = useMemo(() => {
-    // It's current if filter is 'all' or the current month key
-    const currentMonthKey = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
     if (dateFilter === 'all') return true;
-    
-    // Check if Today is inside the fiscal range of the selected filter
     const now = new Date();
     if (dateStart && dateEnd) {
        return now >= dateStart && now <= dateEnd;
     }
-    return dateFilter === currentMonthKey;
+    return false;
   }, [dateFilter, dateStart, dateEnd]);
 
-  // 3. Filter transactions based on selection (For Flow: Income/Expense charts)
+  // 3. Filter transactions based on selection
   const filteredTransactions = useMemo(() => {
     return transactions.filter(t => {
       const d = new Date(t.date);
-      // Start is inclusive (if set), End is inclusive
       return (!dateStart || d >= dateStart) && d <= dateEnd;
     });
   }, [transactions, dateStart, dateEnd]);
@@ -149,7 +172,6 @@ export const Dashboard: React.FC<DashboardProps> = ({
   }, [filteredTransactions]);
 
   // 4. Filter for Balances (Cumulative Stock)
-  // Balances include everything UP TO the end date.
   const cumulativeTransactions = useMemo(() => {
     return transactions.filter(t => {
       const d = new Date(t.date);
@@ -166,18 +188,14 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
   // 5. Compute Aggregates
   const balanceSummary: FinancialSummary = useMemo(() => aggregateData(cumulativeTransactions, categories), [cumulativeTransactions, categories]);
-  
-  // Use statsTransactions for periodSummary so Balance tx don't affect Income/Expense/Charts
   const periodSummary: FinancialSummary = useMemo(() => aggregateData(statsTransactions, categories), [statsTransactions, categories]);
 
-  // Identify savings accounts
   const savingsAccountNames = useMemo(() => {
     return new Set(accounts.filter(a => a.isSavings).map(a => a.name));
   }, [accounts]);
 
   const hasSavingsAccounts = savingsAccountNames.size > 0;
 
-  // Calculate "Active Balance" (Total - Savings) using balanceSummary
   const activeBalance = useMemo(() => {
     return balanceSummary.accountBalances.reduce((sum, item) => {
       if (!savingsAccountNames.has(item.account)) {
@@ -187,51 +205,33 @@ export const Dashboard: React.FC<DashboardProps> = ({
     }, 0);
   }, [balanceSummary, savingsAccountNames]);
 
-  // Total Net Worth (Includes Savings) using balanceSummary
   const totalNetWorth = useMemo(() => {
     return balanceSummary.accountBalances.reduce((acc, curr) => acc + curr.balance, 0);
   }, [balanceSummary]);
 
-  // Calculate Savings Rate based on net flow into Savings Accounts
   const savingsRate = useMemo(() => {
     if (periodSummary.totalIncome === 0) return 0;
-    
-    // Sum of all transactions linked to savings accounts in the current period
-    // statsTransactions already excludes BALANCE type
     const savingsFlow = statsTransactions.reduce((sum, t) => {
       if (savingsAccountNames.has(t.account)) {
-        // We only care about positive flow into savings (e.g. transfers in or income)
-        // If we want net flow (in minus out), just sum t.amount.
-        // Usually savings rate is (Money Saved) / Income.
-        // Money Saved = Net Increase in Savings Account Balance.
         return sum + t.amount;
       }
       return sum;
     }, 0);
-
-    // If net flow is negative (withdrew from savings), rate is effectively 0 for this period context
     const netSavings = Math.max(0, savingsFlow);
-
     return (netSavings / periodSummary.totalIncome) * 100;
   }, [periodSummary, statsTransactions, savingsAccountNames]);
 
-  // Helper to get breakdown for the detailed view
   const detailedBreakdown = useMemo(() => {
     const groups: Record<string, { total: number, categories: Record<string, number> }> = {};
-    
     statsTransactions.filter(t => t.type === TransactionType.EXPENSE).forEach(t => {
        const catDef = categories.find(c => c.name === t.category);
        const groupName = catDef?.group || 'General';
-       
        if (!groups[groupName]) groups[groupName] = { total: 0, categories: {} };
-       
        const absAmount = Math.abs(t.amount);
        groups[groupName].total += absAmount;
-       
        if (!groups[groupName].categories[t.category]) groups[groupName].categories[t.category] = 0;
        groups[groupName].categories[t.category] += absAmount;
     });
-
     return Object.entries(groups).sort((a, b) => b[1].total - a[1].total);
   }, [statsTransactions, categories]);
 
@@ -391,7 +391,6 @@ export const Dashboard: React.FC<DashboardProps> = ({
       <div>
         {showCharts && (
           <div className="space-y-6 animate-fade-in">
-            {/* Detailed Expense Breakdown */}
             <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
               <h3 className="text-lg font-semibold text-slate-800 mb-6">Expense Breakdown by Category</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -440,7 +439,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
         )}
       </div>
 
-       {/* Transaction List (Filtered & Paginated & Grouped by Date) */}
+       {/* Transaction List */}
       <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
         <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center">
           <h3 className="font-semibold text-slate-800">Transactions</h3>
@@ -453,7 +452,6 @@ export const Dashboard: React.FC<DashboardProps> = ({
           <table className="w-full text-sm text-left">
             <thead className="bg-slate-50 text-slate-500 font-medium">
               <tr>
-                {/* Removed separate Date column */}
                 <th className="px-6 py-3 hidden md:table-cell">Account</th>
                 <th className="px-4 sm:px-6 py-3">Description</th>
                 <th className="px-6 py-3 hidden sm:table-cell">Category</th>
@@ -464,14 +462,10 @@ export const Dashboard: React.FC<DashboardProps> = ({
             <tbody className="divide-y divide-slate-100">
               {paginatedTransactions.map((t, index) => {
                 const dateObj = new Date(t.date);
-                // Keep the header date format "Friendly" (Long) as it acts as a separator
                 const dateStr = dateObj.toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-                
-                // Compare with previous item in the *paginated* list to determine if header is needed
                 const prevDateStr = index > 0 
                     ? new Date(paginatedTransactions[index - 1].date).toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
                     : null;
-                
                 const showHeader = dateStr !== prevDateStr;
                 const isPositiveBalance = t.type === 'Balance' && t.amount >= 0;
 
