@@ -154,7 +154,8 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
           date: initialData.date ? new Date(initialData.date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
           description: initialData.description || '',
           amount: formattedAmt,
-          categoryId: initialData.categoryId || '', // Use ID
+          // We use initialData.category (the Name) for the input field so it displays correctly in the text input
+          categoryId: initialData.category || '', 
           type: initialData.type || TransactionType.EXPENSE,
           accountId: initialData.accountId || ''    // Use ID
         });
