@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Download, Trash2, Settings, Tag, CreditCard, Edit2, Save, X, UploadCloud, AlertTriangle, Upload, Wand2, Key, PiggyBank, Plus, CalendarRange, Lock, Unlock, Hash, Calendar } from 'lucide-react';
+import { Download, Trash2, Settings, Tag, CreditCard, Edit2, Save, X, UploadCloud, AlertTriangle, Upload, Wand2, Key, PiggyBank, Plus, CalendarRange, Lock, Unlock, Hash, Calendar, Bookmark } from 'lucide-react';
 import { SqlConsole } from './SqlConsole';
 import { FileUpload } from './FileUpload';
-import { getAccounts, getCategories, updateAccount, updateCategory, createCategory, deleteCategory, deleteAccount, getTransactionCount, generateDummyData, getApiKey, saveApiKey, createAccount, getFiscalConfig, saveFiscalConfig, isDatabaseEncrypted, setDatabasePassword, removeDatabasePassword, saveImportConfig } from '../services/db';
-import { Account, Category, Transaction, FiscalConfig } from '../types';
+import { getAccounts, getCategories, updateAccount, updateCategory, createCategory, deleteCategory, deleteAccount, getTransactionCount, generateDummyData, getApiKey, saveApiKey, createAccount, getFiscalConfig, saveFiscalConfig, isDatabaseEncrypted, setDatabasePassword, removeDatabasePassword, saveImportConfig, getImportTemplates, deleteImportTemplate } from '../services/db';
+import { Account, Category, Transaction, FiscalConfig, ImportTemplate } from '../types';
 
 interface AdminPageProps {
   onBackup: () => void;
@@ -30,17 +30,16 @@ export const AdminPage: React.FC<AdminPageProps> = ({
 }) => {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [templates, setTemplates] = useState<ImportTemplate[]>([]);
   const [showImport, setShowImport] = useState(false);
   const [dbCount, setDbCount] = useState(0);
   const [generating, setGenerating] = useState(false);
   const [isEncrypted, setIsEncrypted] = useState(false);
   const [securityPass, setSecurityPass] = useState('');
   
-  // API Key State
   const [apiKey, setApiKey] = useState('');
   const [isKeySaved, setIsKeySaved] = useState(false);
 
-  // Fiscal Config State
   const [fiscalConfig, setFiscalConfig] = useState<FiscalConfig>({ mode: 'calendar' });
 
   const restoreInputRef = useRef<HTMLInputElement>(null);
@@ -48,6 +47,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
   const refreshData = async () => {
     setAccounts(getAccounts());
     setCategories(getCategories());
+    setTemplates(getImportTemplates());
     setDbCount(getTransactionCount());
     setFiscalConfig(getFiscalConfig());
     setIsEncrypted(await isDatabaseEncrypted());
@@ -72,7 +72,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
   const handleRestoreFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
       onRestore(e.target.files[0]);
-      e.target.value = ''; // Reset input so same file can be selected again
+      e.target.value = '';
     }
   };
 
@@ -114,7 +114,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
   const handleUpdateDecimalSeparator = async (val: '.' | ',') => {
       try {
           await saveImportConfig({ decimalSeparator: val });
-          refreshData(); // Triggers app refresh which updates global state
+          refreshData();
       } catch (e) {
           alert("Failed to save setting");
       }
@@ -123,7 +123,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
   const handleUpdateDateFormat = async (val: string) => {
       try {
           await saveImportConfig({ dateFormat: val });
-          refreshData(); // Triggers app refresh which updates global state
+          refreshData();
       } catch (e) {
           alert("Failed to save setting");
       }
@@ -147,6 +147,13 @@ export const AdminPage: React.FC<AdminPageProps> = ({
       } catch (e: any) {
           alert("Failed to create category: " + e.message);
       }
+  };
+
+  const handleDeleteTemplate = async (id: string) => {
+    if (confirm("Are you sure you want to delete this import template?")) {
+      await deleteImportTemplate(id);
+      refreshData();
+    }
   };
 
   const handleToggleEncryption = async () => {
@@ -206,7 +213,81 @@ export const AdminPage: React.FC<AdminPageProps> = ({
         )}
       </div>
 
-      {/* Configuration Section */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Import Templates Card */}
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 flex flex-col h-full">
+          <div className="flex items-center space-x-2 mb-4">
+            <Bookmark className="w-5 h-5 text-blue-500" />
+            <h3 className="font-bold text-slate-800">Import Templates</h3>
+          </div>
+          <p className="text-sm text-slate-500 mb-4">
+            Saved column mappings for specific banks or statements.
+          </p>
+          <div className="flex-1 border border-slate-100 rounded-lg overflow-hidden bg-slate-50 overflow-y-auto max-h-60">
+            <ul className="divide-y divide-slate-100">
+              {templates.map(tpl => (
+                <li key={tpl.id} className="bg-white px-4 py-3 flex items-center justify-between hover:bg-slate-50 group">
+                  <div>
+                    <span className="text-sm font-medium text-slate-700">{tpl.name}</span>
+                    <span className="ml-2 text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded uppercase font-bold">
+                      {tpl.amountMode} mode
+                    </span>
+                  </div>
+                  <button 
+                    onClick={() => handleDeleteTemplate(tpl.id)}
+                    className="p-1.5 text-slate-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-all"
+                    title="Delete Template"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </li>
+              ))}
+              {templates.length === 0 && (
+                <li className="p-6 text-center text-slate-400 text-sm italic">
+                  No templates saved yet. Create one after your next import.
+                </li>
+              )}
+            </ul>
+          </div>
+        </div>
+
+        {/* Configuration Summary Card */}
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
+          <div className="flex items-center space-x-2 mb-4">
+            <Settings className="w-5 h-5 text-slate-500" />
+            <h3 className="font-bold text-slate-800">General Settings</h3>
+          </div>
+          <div className="space-y-4">
+            <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+               <div>
+                 <p className="text-xs font-bold text-slate-500 uppercase">Number Format</p>
+                 <p className="text-sm font-medium text-slate-700">{decimalSeparator === '.' ? '1,234.56 (Dot)' : '1.234,56 (Comma)'}</p>
+               </div>
+               <div className="flex gap-2">
+                 <button onClick={() => handleUpdateDecimalSeparator('.')} className={`px-2 py-1 text-xs rounded border ${decimalSeparator === '.' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-600 border-slate-200'}`}>Dot</button>
+                 <button onClick={() => handleUpdateDecimalSeparator(',')} className={`px-2 py-1 text-xs rounded border ${decimalSeparator === ',' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-600 border-slate-200'}`}>Comma</button>
+               </div>
+            </div>
+            <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+               <div>
+                 <p className="text-xs font-bold text-slate-500 uppercase">System Date Format</p>
+                 <p className="text-sm font-medium text-slate-700">{dateFormat}</p>
+               </div>
+               <select 
+                  value={dateFormat}
+                  onChange={(e) => handleUpdateDateFormat(e.target.value)}
+                  className="text-xs border rounded p-1 bg-white"
+               >
+                  <option value="DD/MM/YYYY">DD/MM/YYYY</option>
+                  <option value="MM/DD/YYYY">MM/DD/YYYY</option>
+                  <option value="YYYY-MM-DD">YYYY-MM-DD</option>
+               </select>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Database Management Card */}
       <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
         <div className="flex items-center space-x-3 mb-6 border-b border-slate-100 pb-4">
           <div className="p-2 bg-slate-100 rounded-lg">
@@ -219,7 +300,6 @@ export const AdminPage: React.FC<AdminPageProps> = ({
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          
            {/* Security Config */}
            <div className={`p-5 border rounded-xl transition-all col-span-1 md:col-span-2 lg:col-span-2 flex flex-col ${isEncrypted ? 'border-emerald-200 bg-emerald-50/50' : 'border-slate-200 bg-slate-50/50'}`}>
                 <h3 className={`font-semibold flex items-center mb-2 ${isEncrypted ? 'text-emerald-800' : 'text-slate-800'}`}>
@@ -370,73 +450,6 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                </div>
            </div>
 
-           {/* Number Formatting Config */}
-           <div className="p-5 border border-cyan-200 rounded-xl bg-cyan-50/50 hover:border-cyan-300 transition-all col-span-1 md:col-span-2 lg:col-span-2 flex flex-col">
-               <h3 className="font-semibold text-cyan-800 flex items-center mb-3">
-                   <Hash className="w-4 h-4 mr-2 text-cyan-600" />
-                   Number Format
-               </h3>
-               <p className="text-sm text-cyan-700/80 mb-4">
-                   Choose how currency amounts are displayed and entered.
-               </p>
-               <div className="flex gap-4 mb-4">
-                   <label className="flex items-center space-x-2 cursor-pointer flex-1 p-3 bg-white border rounded-lg hover:border-cyan-400 transition-colors">
-                       <input 
-                           type="radio" 
-                           name="decimalSep"
-                           checked={decimalSeparator === '.'}
-                           onChange={() => handleUpdateDecimalSeparator('.')}
-                           className="w-4 h-4 text-cyan-600 focus:ring-cyan-500"
-                           style={{ colorScheme: 'light' }}
-                       />
-                       <div>
-                           <div className="font-bold text-slate-800">1,234.56</div>
-                           <div className="text-xs text-slate-500">Dot Decimal</div>
-                       </div>
-                   </label>
-                   <label className="flex items-center space-x-2 cursor-pointer flex-1 p-3 bg-white border rounded-lg hover:border-cyan-400 transition-colors">
-                       <input 
-                           type="radio" 
-                           name="decimalSep"
-                           checked={decimalSeparator === ','}
-                           onChange={() => handleUpdateDecimalSeparator(',')}
-                           className="w-4 h-4 text-cyan-600 focus:ring-cyan-500"
-                           style={{ colorScheme: 'light' }}
-                       />
-                       <div>
-                           <div className="font-bold text-slate-800">1.234,56</div>
-                           <div className="text-xs text-slate-500">Comma Decimal</div>
-                       </div>
-                   </label>
-               </div>
-           </div>
-
-           {/* Date Formatting Config */}
-           <div className="p-5 border border-blue-200 rounded-xl bg-blue-50/50 hover:border-blue-300 transition-all col-span-1 md:col-span-2 lg:col-span-2 flex flex-col">
-               <h3 className="font-semibold text-blue-800 flex items-center mb-3">
-                   <Calendar className="w-4 h-4 mr-2 text-blue-600" />
-                   Date Format
-               </h3>
-               <p className="text-sm text-blue-700/80 mb-4">
-                   System-wide date display format.
-               </p>
-               <div className="space-y-2">
-                   {['DD/MM/YYYY', 'MM/DD/YYYY', 'YYYY-MM-DD'].map(fmt => (
-                       <label key={fmt} className="flex items-center space-x-2 cursor-pointer p-2 bg-white border rounded-lg hover:border-blue-400 transition-colors">
-                           <input 
-                               type="radio" 
-                               name="dateFmt"
-                               checked={dateFormat === fmt}
-                               onChange={() => handleUpdateDateFormat(fmt)}
-                               className="w-4 h-4 text-blue-600 focus:ring-blue-500"
-                               style={{ colorScheme: 'light' }}
-                           />
-                           <span className="text-sm font-medium text-slate-700">{fmt}</span>
-                       </label>
-                   ))}
-               </div>
-           </div>
-
           {/* Generate Dummy Data */}
           {dbCount === 0 && (
              <div className="p-5 border border-indigo-200 rounded-xl bg-indigo-50/50 hover:border-indigo-300 transition-all flex flex-col h-full">
@@ -519,7 +532,6 @@ export const AdminPage: React.FC<AdminPageProps> = ({
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Account Config */}
         <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 flex flex-col">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center space-x-2">
@@ -543,7 +555,6 @@ export const AdminPage: React.FC<AdminPageProps> = ({
           />
         </div>
 
-        {/* Category Config */}
         <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 flex flex-col">
           <div className="flex items-center space-x-2 mb-4">
             <Tag className="w-5 h-5 text-emerald-500" />
@@ -565,13 +576,10 @@ export const AdminPage: React.FC<AdminPageProps> = ({
         </div>
       </div>
 
-      {/* SQL Console embedded */}
       <SqlConsole />
     </div>
   );
 };
-
-// --- Sub Components ---
 
 const AccountList: React.FC<{ 
     accounts: Account[], 
@@ -583,7 +591,6 @@ const AccountList: React.FC<{
   const [editValue, setEditValue] = useState('');
   const [editIsSavings, setEditIsSavings] = useState(false);
   
-  // New account state
   const [newAccName, setNewAccName] = useState('');
   const [newAccIsSavings, setNewAccIsSavings] = useState(false);
 
@@ -610,7 +617,6 @@ const AccountList: React.FC<{
 
   return (
      <div className="flex-1 flex flex-col min-h-0">
-        {/* Create Form */}
         <div className="mb-4 bg-slate-50 p-3 rounded-lg border border-slate-100">
            <div className="flex items-center space-x-2">
              <input 
@@ -636,7 +642,6 @@ const AccountList: React.FC<{
            </div>
         </div>
 
-        {/* List */}
         <div className="flex-1 border border-slate-100 rounded-lg overflow-hidden bg-slate-50 max-h-96 overflow-y-auto">
             <ul className="divide-y divide-slate-100">
             {accounts.map((acc) => (
@@ -695,7 +700,6 @@ const CategoryList: React.FC<{
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [formData, setFormData] = useState({ name: '', type: 'Expense', group: 'General' });
   
-  // New Category State
   const [newName, setNewName] = useState('');
   const [newType, setNewType] = useState('Expense');
   const [newGroup, setNewGroup] = useState('General');
@@ -716,7 +720,6 @@ const CategoryList: React.FC<{
       if (newName.trim()) {
           await onCreate(newName, newType, newGroup);
           setNewName('');
-          // Keep type/group selections for easy multi-add
       }
   };
 
@@ -782,7 +785,6 @@ const CategoryList: React.FC<{
 
   return (
      <div className="flex-1 flex flex-col min-h-0">
-        {/* Create Form */}
         <div className="mb-4 bg-slate-50 p-3 rounded-lg border border-slate-100">
            <div className="flex items-center space-x-2">
              <input 

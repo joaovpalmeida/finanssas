@@ -1,9 +1,9 @@
 import React, { useCallback, useState, useMemo, useEffect } from 'react';
-import { Upload, FileSpreadsheet, Loader2, AlertCircle, ArrowRight, Settings, Layers, ChevronRight, ArrowLeft, Table, Calendar, Columns, ArrowDownToLine, ArrowUpFromLine, Eye, Type, Tag, CheckSquare, Square, AlertTriangle, Edit2, Copy, X, Sparkles, List } from 'lucide-react';
+import { Upload, FileSpreadsheet, Loader2, AlertCircle, ArrowRight, Settings, Layers, ChevronRight, ArrowLeft, Table, Calendar, Columns, ArrowDownToLine, ArrowUpFromLine, Eye, Type, Tag, CheckSquare, Square, AlertTriangle, Edit2, Copy, X, Sparkles, List, Save, Bookmark, CheckCircle } from 'lucide-react';
 import { getExcelColumns, getExcelSheetNames, parseExcelFile, ColumnMapping, ExcelColumn } from '../utils/excelParser';
-import { Transaction, Category, Account } from '../types';
+import { Transaction, Category, Account, ImportTemplate } from '../types';
 import { formatCurrency, generateTransactionSignature } from '../utils/helpers';
-import { getExistingSignatures, saveImportConfig, getImportConfig, getCategorySuggestions } from '../services/db';
+import { getExistingSignatures, saveImportConfig, getImportConfig, getCategorySuggestions, getImportTemplates, saveImportTemplate } from '../services/db';
 
 interface FileUploadProps {
   onUpload: (data: Transaction[]) => void;
@@ -35,7 +35,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({
   const [accountName, setAccountName] = useState(accounts.length > 0 ? accounts[0].name : 'Main Account');
   const [defaultDate, setDefaultDate] = useState(new Date().toISOString().split('T')[0]);
   
-  const [step, setStep] = useState<'upload' | 'sheet-selection' | 'mapping' | 'preview'>('upload');
+  const [step, setStep] = useState<'upload' | 'sheet-selection' | 'mapping' | 'preview' | 'success'>('upload');
   
   const [file, setFile] = useState<File | null>(null);
   const [columns, setColumns] = useState<ExcelColumn[]>([]);
@@ -47,6 +47,13 @@ export const FileUpload: React.FC<FileUploadProps> = ({
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isParsing, setIsParsing] = useState(false);
   const [parseError, setParseError] = useState<string | null>(null);
+
+  // Template State
+  const [templates, setTemplates] = useState<ImportTemplate[]>([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
+  const [showSaveTemplateModal, setShowSaveTemplateModal] = useState(false);
+  const [newTemplateName, setNewTemplateName] = useState('');
+  const [importSummary, setImportSummary] = useState<{count: number} | null>(null);
 
   // State for Inline Category Editing
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -94,6 +101,13 @@ export const FileUpload: React.FC<FileUploadProps> = ({
       }));
   }, [defaultDateFormat, defaultDecimalSeparator]);
 
+  // Load templates on mount or when mapping step starts
+  useEffect(() => {
+    if (step === 'mapping') {
+      setTemplates(getImportTemplates());
+    }
+  }, [step]);
+
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(true);
@@ -113,7 +127,6 @@ export const FileUpload: React.FC<FileUploadProps> = ({
 
     const newMapping = {
       date: findIndex(/date/i),
-      // Keep existing format preferences
       dateFormat: mapping.dateFormat,
       decimalSeparator: mapping.decimalSeparator,
       description: findIndex(/description|desc|name/i),
@@ -139,7 +152,6 @@ export const FileUpload: React.FC<FileUploadProps> = ({
       const guessed = guessMapping(cols);
       setMapping(prev => ({...prev, ...guessed}));
       
-      // Auto-detect mode if income/expense columns seem to exist
       if (!guessed.amount && (guessed.income || guessed.expense)) {
         setAmountMode('split');
       } else {
@@ -200,7 +212,6 @@ export const FileUpload: React.FC<FileUploadProps> = ({
         if (data.length === 0) {
              setParseError("No valid transactions found with the current mapping. Please check row ranges and column selections.");
         } else {
-            // DUPLICATE DETECTION LOGIC
             const existingSignatures = getExistingSignatures();
             const categorySuggestions = getCategorySuggestions();
             
@@ -213,7 +224,6 @@ export const FileUpload: React.FC<FileUploadProps> = ({
                 let status: DuplicateStatus = 'none';
                 let autoCat = false;
 
-                // Auto-suggest category if uncategorized
                 if (t.category === 'Uncategorized') {
                     const match = categorySuggestions[t.description.trim().toLowerCase()];
                     if (match) {
@@ -222,16 +232,13 @@ export const FileUpload: React.FC<FileUploadProps> = ({
                     }
                 }
 
-                // Check DB
                 if (existingSignatures.has(sig)) {
                     status = 'db';
                 } 
-                // Check internal duplicates in current file
                 else if (fileSignatures.has(sig)) {
                     status = 'file';
                 }
 
-                // If no duplicate, auto-select
                 if (status === 'none') {
                     initialSelection.add(t.id);
                 }
@@ -240,7 +247,6 @@ export const FileUpload: React.FC<FileUploadProps> = ({
                 processedPreview.push({ ...t, duplicateStatus: status, isAutoCategorized: autoCat });
             });
 
-            // Sort by Date Descending
             processedPreview.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
             setParsedPreview(processedPreview);
@@ -255,21 +261,56 @@ export const FileUpload: React.FC<FileUploadProps> = ({
   };
 
   const handleConfirmImport = async () => {
-    // Only import selected transactions
     const toImport = parsedPreview
         .filter(t => selectedIds.has(t.id))
-        .map(({ duplicateStatus, isAutoCategorized, ...t }) => t); // Remove internal status props
+        .map(({ duplicateStatus, isAutoCategorized, ...t }) => t);
     
     if (toImport.length === 0) {
         alert("No transactions selected for import.");
         return;
     }
 
-    // Do NOT save user preferences for imports here. 
-    // Settings in Import UI are temporary overrides per file.
-    
     onUpload(toImport);
+    setImportSummary({ count: toImport.length });
+    setStep('success');
   };
+
+  const handleLoadTemplate = (id: string) => {
+    const template = templates.find(t => t.id === id);
+    if (template) {
+      setMapping(template.mapping);
+      setAmountMode(template.amountMode);
+      setSelectedTemplateId(id);
+    } else {
+      setSelectedTemplateId('');
+    }
+  };
+
+  const handleSaveTemplate = async () => {
+    if (!newTemplateName.trim()) return;
+    
+    const template: ImportTemplate = {
+      id: selectedTemplateId || `tpl-${Date.now()}`,
+      name: newTemplateName,
+      amountMode,
+      mapping
+    };
+
+    await saveImportTemplate(template);
+    setShowSaveTemplateModal(false);
+    // After template is handled, the user might want to continue or be redirected
+    // Usually, success means they are done. 
+    // We'll leave it in the success state for a moment.
+  };
+
+  const hasMappingChanged = useMemo(() => {
+    if (!selectedTemplateId) return true;
+    const template = templates.find(t => t.id === selectedTemplateId);
+    if (!template) return true;
+    
+    // Simple deep comparison for mapping object
+    return JSON.stringify(template.mapping) !== JSON.stringify(mapping) || template.amountMode !== amountMode;
+  }, [selectedTemplateId, mapping, amountMode, templates]);
 
   const cancelUpload = () => {
     setStep('upload');
@@ -277,7 +318,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({
     setColumns([]);
     setSheets([]);
     setParsedPreview([]);
-    // Reset mapping but keep preferences
+    setSelectedTemplateId('');
     setMapping({ 
       date: '', 
       dateFormat: defaultDateFormat || '', 
@@ -307,13 +348,9 @@ export const FileUpload: React.FC<FileUploadProps> = ({
       }
   };
 
-  // --- Category Editing Logic ---
-
-  // Get unique categories for the datalist (Existing DB Categories + New ones from File)
   const availableCategories = useMemo(() => {
     const fileCats = new Set(parsedPreview.map(t => t.category));
     const dbCats = new Set(categories.map(c => c.name));
-    // Merge both
     const all = new Set([...fileCats, ...dbCats]);
     return Array.from(all).sort();
   }, [parsedPreview, categories]);
@@ -324,7 +361,6 @@ export const FileUpload: React.FC<FileUploadProps> = ({
   };
 
   const saveEditing = (t: PreviewTransaction) => {
-    // If not editing this item or no change, cancel
     if (editingId !== t.id) return;
     
     const newName = tempCategory.trim();
@@ -333,7 +369,6 @@ export const FileUpload: React.FC<FileUploadProps> = ({
         return;
     }
 
-    // Check if other transactions in the preview share this category (to offer bulk rename)
     const count = parsedPreview.filter(p => p.id !== t.id && p.category === t.category).length;
     
     if (count > 0) {
@@ -362,7 +397,6 @@ export const FileUpload: React.FC<FileUploadProps> = ({
       setPendingBulkRename(null);
   };
 
-  // Render Helpers
   const renderColumnSelect = (
     label: string, 
     value: string | undefined, 
@@ -444,26 +478,102 @@ export const FileUpload: React.FC<FileUploadProps> = ({
     </div>
   );
 
+  // Step 5: Success & Template Management
+  if (step === 'success') {
+    const usedTemplate = templates.find(t => t.id === selectedTemplateId);
+    const shouldPromptNew = !selectedTemplateId;
+    const shouldPromptUpdate = !!selectedTemplateId && hasMappingChanged;
+
+    return (
+      <div className="w-full max-w-xl mx-auto p-8 bg-white rounded-2xl shadow-xl border border-slate-200 animate-scale-in text-center">
+        <div className="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-6">
+          <CheckCircle className="w-12 h-12" />
+        </div>
+        <h3 className="text-2xl font-bold text-slate-800 mb-2">Import Successful!</h3>
+        <p className="text-slate-600 mb-8">
+          Successfully imported <strong>{importSummary?.count}</strong> transactions into <strong>{accountName}</strong>.
+        </p>
+
+        {(shouldPromptNew || shouldPromptUpdate) ? (
+          <div className="bg-blue-50 border border-blue-100 rounded-xl p-6 text-left mb-8">
+            <h4 className="font-bold text-blue-800 flex items-center mb-3">
+              <Bookmark className="w-5 h-5 mr-2" />
+              {shouldPromptNew ? 'Save these settings as a template?' : `Update template "${usedTemplate?.name}"?`}
+            </h4>
+            <p className="text-sm text-blue-700 mb-4 leading-relaxed">
+              {shouldPromptNew 
+                ? "You manually mapped these columns. Save this configuration to reuse it next time you upload a similar file."
+                : "You modified the column mapping for this template. Would you like to update the saved configuration?"}
+            </p>
+            
+            {showSaveTemplateModal ? (
+              <div className="space-y-4 animate-fade-in">
+                <div>
+                  <label className="block text-xs font-bold text-blue-600 uppercase mb-1">Template Name</label>
+                  <input 
+                    type="text"
+                    autoFocus
+                    placeholder="e.g. My Bank Statement"
+                    value={newTemplateName}
+                    onChange={(e) => setNewTemplateName(e.target.value)}
+                    className="w-full px-3 py-2 border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <button 
+                    onClick={handleSaveTemplate}
+                    disabled={!newTemplateName.trim()}
+                    className="flex-1 bg-blue-600 text-white py-2 rounded-lg font-bold hover:bg-blue-700 transition-colors disabled:opacity-50"
+                  >
+                    Save Template
+                  </button>
+                  <button 
+                    onClick={() => setShowSaveTemplateModal(false)}
+                    className="px-4 py-2 text-slate-500 hover:text-slate-700 font-medium"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button 
+                onClick={() => {
+                   setNewTemplateName(usedTemplate?.name || '');
+                   setShowSaveTemplateModal(true);
+                }}
+                className="flex items-center px-6 py-2.5 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 transition-colors shadow-sm"
+              >
+                {shouldPromptNew ? 'Yes, Create Template' : 'Yes, Update Template'}
+              </button>
+            )}
+          </div>
+        ) : null}
+
+        <button 
+          onClick={() => window.location.reload()} // Quickest way to clear all state and go to dashboard is redirect or refresh
+          className="w-full py-3 bg-slate-100 text-slate-700 rounded-xl font-bold hover:bg-slate-200 transition-colors"
+        >
+          Finish & View Dashboard
+        </button>
+      </div>
+    );
+  }
+
   // Step 4: Preview
   if (step === 'preview') {
-    // Only calculate totals for SELECTED items
     const selectedTransactions = parsedPreview.filter(t => selectedIds.has(t.id));
     const totalIncome = selectedTransactions.filter(t => t.type === 'Income').reduce((s, t) => s + t.amount, 0);
     const totalExpense = selectedTransactions.filter(t => t.type === 'Expense').reduce((s, t) => s + Math.abs(t.amount), 0);
-    
     const duplicateCount = parsedPreview.filter(t => t.duplicateStatus !== 'none').length;
 
     return (
       <div className="w-full max-w-4xl mx-auto p-6 bg-slate-50 rounded-xl border border-slate-200 animate-fade-in relative">
-         
-         {/* Datalist for autocomplete combining File + DB categories */}
          <datalist id="category-options">
             {availableCategories.map(c => (
                 <option key={c} value={c} />
             ))}
          </datalist>
 
-         {/* Bulk Rename Confirmation Modal */}
          {pendingBulkRename && (
             <div className="absolute inset-0 z-50 flex items-center justify-center bg-slate-900/50 rounded-xl backdrop-blur-sm p-4">
                 <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-sm animate-scale-in">
@@ -511,7 +621,6 @@ export const FileUpload: React.FC<FileUploadProps> = ({
             </span>
          </div>
 
-         {/* Stats */}
          <div className="flex flex-wrap gap-4 mb-4 text-sm">
             <div className="bg-white px-4 py-2 rounded-lg border border-slate-200 flex-1">
                <span className="text-slate-500 block text-xs uppercase font-bold">Selected Income</span>
@@ -534,7 +643,6 @@ export const FileUpload: React.FC<FileUploadProps> = ({
             )}
          </div>
 
-         {/* Toolbar */}
          <div className="flex items-center justify-between py-2 border-b border-slate-200 mb-2">
              <div className="flex items-center space-x-4 text-sm">
                  <button 
@@ -609,7 +717,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({
                                         onBlur={() => saveEditing(t)}
                                         onKeyDown={(e) => {
                                             if (e.key === 'Enter') {
-                                                e.currentTarget.blur(); // Triggers save via onBlur
+                                                e.currentTarget.blur();
                                             }
                                             if (e.key === 'Escape') {
                                                 setEditingId(null);
@@ -669,7 +777,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({
     );
   }
 
-  // Step 2: Sheet Selection (Unchanged)
+  // Step 2: Sheet Selection
   if (step === 'sheet-selection') {
     return (
       <div className="w-full max-w-2xl mx-auto p-6 bg-slate-50 rounded-xl border border-slate-200 animate-fade-in">
@@ -737,6 +845,28 @@ export const FileUpload: React.FC<FileUploadProps> = ({
           </span>
         </div>
         
+        {/* Template Selector */}
+        <div className="mb-6 bg-blue-50 p-4 rounded-xl border border-blue-100 flex flex-col sm:flex-row sm:items-center gap-3">
+            <div className="flex items-center text-blue-700 font-semibold text-sm">
+                <Bookmark className="w-4 h-4 mr-2" /> Load Template:
+            </div>
+            <select 
+                value={selectedTemplateId}
+                onChange={(e) => handleLoadTemplate(e.target.value)}
+                className="flex-1 px-3 py-1.5 border border-blue-200 rounded-lg text-sm bg-white text-slate-700"
+            >
+                <option value="">(None / Custom Mapping)</option>
+                {templates.map(tpl => (
+                    <option key={tpl.id} value={tpl.id}>{tpl.name}</option>
+                ))}
+            </select>
+            {selectedTemplateId && hasMappingChanged && (
+               <div className="text-[10px] text-amber-600 font-bold bg-amber-50 px-2 py-1 rounded border border-amber-200">
+                   MAPPING MODIFIED
+               </div>
+            )}
+        </div>
+
         {/* Column Mode Toggle */}
         <div className="mb-6 bg-white p-1 rounded-lg border border-slate-200 inline-flex">
            <button
@@ -753,16 +883,11 @@ export const FileUpload: React.FC<FileUploadProps> = ({
            </button>
         </div>
 
-        {/* Added bottom padding pb-24 to prevent footer hiding elements */}
         <div className="space-y-6 mb-8 h-96 overflow-y-auto pr-2 custom-scrollbar pb-24">
-          
-          {/* Section: Common Fields */}
           <div className="space-y-4">
               <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100 pb-2">Common Fields</h4>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {renderColumnSelect("Date Column", mapping.date, v => setMapping({...mapping, date: v}))}
-                
-                {/* Date Format Selector */}
                 <div>
                     <label className="block text-xs font-semibold text-slate-500 mb-1">Date Format (for text cells)</label>
                     <select
@@ -776,8 +901,6 @@ export const FileUpload: React.FC<FileUploadProps> = ({
                         <option value="YYYY-MM-DD">YYYY-MM-DD (ISO)</option>
                     </select>
                 </div>
-
-                {/* Number Format Selector */}
                 <div>
                     <label className="block text-xs font-semibold text-slate-500 mb-1">Number Format</label>
                     <select
@@ -789,11 +912,8 @@ export const FileUpload: React.FC<FileUploadProps> = ({
                         <option value=",">1.234,56 (Comma Decimal)</option>
                     </select>
                 </div>
-
                 <div>
-                    <label className="block text-xs font-semibold text-slate-500 mb-1">
-                      Default Date (Fallback)
-                    </label>
+                    <label className="block text-xs font-semibold text-slate-500 mb-1">Default Date (Fallback)</label>
                     <div className="relative">
                        <Calendar className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
                        <input 
@@ -827,17 +947,13 @@ export const FileUpload: React.FC<FileUploadProps> = ({
               </div>
           </div>
 
-          {/* Section: Amounts & Specifics */}
           <div className="space-y-4">
              <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100 pb-2">Transaction Values & Row Ranges</h4>
-             
              {amountMode === 'single' ? (
                 <>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                      {renderColumnSelect("Amount Column", mapping.amount, v => setMapping({...mapping, amount: v}), true)}
                   </div>
-                  
-                  {/* Global Row Selection for Single Mode */}
                   <div className="grid grid-cols-2 gap-4 bg-slate-50 p-3 rounded-lg border border-slate-100 mt-2">
                      {renderRowInput("Start Row", mapping.startRow, v => setMapping({...mapping, startRow: v}))}
                      {renderRowInput("End Row (Optional)", mapping.endRow, v => setMapping({...mapping, endRow: v}), "End of file")}
@@ -845,16 +961,12 @@ export const FileUpload: React.FC<FileUploadProps> = ({
                 </>
              ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                   {/* Income Group */}
                    <div className="space-y-3 bg-emerald-50/50 p-4 rounded-lg border border-emerald-100">
                       <div className="flex items-center text-emerald-600 font-semibold text-sm mb-2">
-                         <ArrowDownToLine className="w-4 h-4 mr-2" />
-                         Income Settings
+                         <ArrowDownToLine className="w-4 h-4 mr-2" /> Income Settings
                       </div>
                       {renderColumnSelect("Income Amount Column", mapping.income, v => setMapping({...mapping, income: v}), !mapping.expense)}
                       {renderColumnSelect("Description (Optional)", mapping.incomeDescription, v => setMapping({...mapping, incomeDescription: v}), false, "Overrides default")}
-                      
-                      {/* Income Category (Specific or Manual) */}
                       {renderColumnOrManual(
                           "Income Category", 
                           mapping.incomeCategory, 
@@ -864,7 +976,6 @@ export const FileUpload: React.FC<FileUploadProps> = ({
                           <Tag className="w-3 h-3"/>,
                           "Salary"
                       )}
-                      
                       <div className="pt-2 border-t border-emerald-100/50">
                         <label className="text-[10px] font-bold text-emerald-500 uppercase">Income Rows</label>
                         <div className="grid grid-cols-2 gap-2 mt-1">
@@ -873,17 +984,12 @@ export const FileUpload: React.FC<FileUploadProps> = ({
                         </div>
                       </div>
                    </div>
-                   
-                   {/* Expense Group */}
                    <div className="space-y-3 bg-red-50/50 p-4 rounded-lg border border-red-100">
                       <div className="flex items-center text-red-600 font-semibold text-sm mb-2">
-                         <ArrowUpFromLine className="w-4 h-4 mr-2" />
-                         Expense Settings
+                         <ArrowUpFromLine className="w-4 h-4 mr-2" /> Expense Settings
                       </div>
                       {renderColumnSelect("Expense Amount Column", mapping.expense, v => setMapping({...mapping, expense: v}), !mapping.income)}
                       {renderColumnSelect("Description (Optional)", mapping.expenseDescription, v => setMapping({...mapping, expenseDescription: v}), false, "Overrides default")}
-                      
-                      {/* Expense Category (Specific or Manual) */}
                       {renderColumnOrManual(
                           "Expense Category", 
                           mapping.expenseCategory, 
@@ -893,7 +999,6 @@ export const FileUpload: React.FC<FileUploadProps> = ({
                           <Tag className="w-3 h-3"/>,
                           "General Expense"
                       )}
-                      
                       <div className="pt-2 border-t border-red-100/50">
                         <label className="text-[10px] font-bold text-red-500 uppercase">Expense Rows</label>
                         <div className="grid grid-cols-2 gap-2 mt-1">
@@ -902,13 +1007,8 @@ export const FileUpload: React.FC<FileUploadProps> = ({
                         </div>
                       </div>
                    </div>
-                   
-                   <p className="text-[10px] text-slate-400 md:col-span-2 text-center">
-                     All valid expense amounts will be converted to negative values automatically.
-                   </p>
                 </div>
              )}
-
              {amountMode === 'split' && (
                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2 border-t border-slate-100 pt-3">
                   {renderColumnOrManual(
@@ -924,7 +1024,6 @@ export const FileUpload: React.FC<FileUploadProps> = ({
              )}
           </div>
 
-          {/* Section: Account */}
           <div className="space-y-4">
              <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100 pb-2">Account Assignment</h4>
              <div className="flex gap-4 items-center">
@@ -980,7 +1079,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({
               (!mapping.date && !defaultDate) || 
               isParsing
             }
-            className="flex items-center px-6 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex items-center px-6 py-2 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isParsing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Eye className="w-4 h-4 mr-2" />}
             Preview Data
@@ -996,7 +1095,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({
     );
   }
 
-  // Step 1: File Upload (Unchanged)
+  // Step 1: File Upload
   return (
     <div className="w-full max-w-2xl mx-auto p-6">
       <div

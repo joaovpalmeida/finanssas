@@ -79,3 +79,10 @@ export interface FiscalConfig {
   startDay?: number; // 1-31, used if mode is 'fixed_day'
   triggerCategory?: string; // category ID or Name, used if mode is 'income_trigger'
 }
+
+export interface ImportTemplate {
+  id: string;
+  name: string;
+  amountMode: 'single' | 'split';
+  mapping: any; // Stores ColumnMapping
+}

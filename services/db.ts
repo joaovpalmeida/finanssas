@@ -1,5 +1,4 @@
-
-import { Transaction, TransactionType, SavingsGoal, Category, Account, CategoryGroup, SearchFilters, FiscalConfig } from '../types';
+import { Transaction, TransactionType, SavingsGoal, Category, Account, CategoryGroup, SearchFilters, FiscalConfig, ImportTemplate } from '../types';
 import { generateTransactionSignature } from '../utils/helpers';
 import { encryptDatabase, decryptDatabase, EncryptedData } from '../utils/encryption';
 
@@ -130,6 +129,13 @@ const initSchema = () => {
       key TEXT PRIMARY KEY,
       value TEXT
     );
+
+    CREATE TABLE IF NOT EXISTS import_templates (
+      id TEXT PRIMARY KEY,
+      name TEXT UNIQUE,
+      amount_mode TEXT,
+      mapping_json TEXT
+    );
   `;
   db.run(sql);
   saveDB();
@@ -142,6 +148,14 @@ const migrateSchema = () => {
   initSchema();
 
   try {
+    // Check for import_templates table specifically as it might be new
+    db.run(`CREATE TABLE IF NOT EXISTS import_templates (
+      id TEXT PRIMARY KEY,
+      name TEXT UNIQUE,
+      amount_mode TEXT,
+      mapping_json TEXT
+    )`);
+
     // 2. Check schema evolution for 'transactions' table
     const res = db.exec("PRAGMA table_info(transactions)");
     if (res.length > 0) {
@@ -149,7 +163,6 @@ const migrateSchema = () => {
       
       if (!columns.includes('category_id')) {
         console.log("Migrating schema: Adding category_id to transactions");
-        // SQLite supports ADD COLUMN
         db.run("ALTER TABLE transactions ADD COLUMN category_id TEXT");
       }
       
@@ -158,13 +171,7 @@ const migrateSchema = () => {
         db.run("ALTER TABLE transactions ADD COLUMN account_id TEXT");
       }
 
-      // Check for potential data migration from old text columns to IDs
-      // This helps if the user had an old version where 'category' and 'account' were simple text columns
       if (columns.includes('category') && columns.includes('category_id')) {
-         // Attempt to link existing text categories to category IDs
-         // We first need to ensure the categories exist in the categories table
-         // Since we can't do complex INSERT SELECT logic easily across these in one go without potential duplicates/errors in simple SQLite mode,
-         // We will just try to update the IDs for names that DO exist.
          db.run(`
             UPDATE transactions 
             SET category_id = (SELECT id FROM categories WHERE categories.name = transactions.category)
@@ -207,6 +214,7 @@ export const resetDB = async () => {
   db.run("DELETE FROM accounts;");
   db.run("DELETE FROM categories;");
   db.run("DELETE FROM configs;");
+  db.run("DELETE FROM import_templates;");
   db.run("PRAGMA foreign_keys = ON;");
   await saveDB();
 };
@@ -241,10 +249,6 @@ export const importDatabase = async (file: File): Promise<void> => {
         db = new SQL.Database(u8);
         db.run("PRAGMA foreign_keys = ON;");
         migrateSchema();
-        
-        // If we imported a fresh DB, we should probably keep the existing password preference 
-        // OR reset it. For safety, let's keep the session password if it exists and encrypt the new data,
-        // or if no session password, save raw.
         await saveDB();
         resolve();
       } catch (err) {
@@ -256,259 +260,6 @@ export const importDatabase = async (file: File): Promise<void> => {
   });
 };
 
-export const getTransactionCount = (): number => {
-  if (!db) return 0;
-  try {
-    const res = db.exec("SELECT count(*) FROM transactions");
-    if (res.length > 0) {
-        return res[0].values[0][0];
-    }
-    return 0;
-  } catch(e) {
-    return 0;
-  }
-};
-
-export const getExistingSignatures = (): Set<string> => {
-  if (!db) return new Set();
-  try {
-    const res = db.exec("SELECT date, amount, description FROM transactions");
-    if (res.length === 0) return new Set();
-
-    const values = res[0].values;
-    const signatures = new Set<string>();
-
-    values.forEach((row: any[]) => {
-      const t = {
-        date: row[0],
-        amount: row[1],
-        description: row[2]
-      } as Transaction;
-      signatures.add(generateTransactionSignature(t));
-    });
-
-    return signatures;
-  } catch (e) {
-    console.error("Error fetching existing signatures", e);
-    return new Set();
-  }
-};
-
-export const getCategorySuggestions = (): Record<string, string> => {
-  if (!db) return {};
-  try {
-    const sql = `
-      SELECT t.description, c.name 
-      FROM transactions t
-      JOIN categories c ON t.category_id = c.id
-      WHERE t.description IS NOT NULL AND t.description != ''
-      ORDER BY t.date ASC, t.id ASC
-    `;
-    const res = db.exec(sql);
-    if (res.length === 0) return {};
-
-    const map: Record<string, string> = {};
-    const values = res[0].values;
-    
-    values.forEach((row: any[]) => {
-      const desc = String(row[0] || '').trim().toLowerCase();
-      const cat = String(row[1] || '');
-      if (desc && cat) {
-        map[desc] = cat; 
-      }
-    });
-    return map;
-  } catch (e) {
-    console.error("Error fetching category suggestions", e);
-    return {};
-  }
-};
-
-export const generateDummyData = async () => {
-  if (!db) return;
-
-  db.run("BEGIN TRANSACTION");
-
-  try {
-    // 1. Setup Accounts and Categories with Explicit IDs
-    const accountsData = [
-        { name: 'Main Checking', isSavings: 0 },
-        { name: 'Savings', isSavings: 1 },
-        { name: 'Credit Card', isSavings: 0 }
-    ];
-
-    const categoriesData = [
-        { name: 'Salary', type: 'Income', group: 'Recurring' },
-        { name: 'Freelance', type: 'Income', group: 'General' },
-        { name: 'Rent', type: 'Expense', group: 'Recurring' },
-        { name: 'Utilities', type: 'Expense', group: 'Recurring' },
-        { name: 'Internet', type: 'Expense', group: 'Recurring' },
-        { name: 'Groceries', type: 'Expense', group: 'General' },
-        { name: 'Dining Out', type: 'Expense', group: 'General' },
-        { name: 'Transport', type: 'Expense', group: 'General' },
-        { name: 'Entertainment', type: 'Expense', group: 'General' },
-        { name: 'Shopping', type: 'Expense', group: 'General' },
-        { name: 'Health', type: 'Expense', group: 'General' },
-        { name: 'Transfer', type: 'Transfer', group: 'General' }
-    ];
-
-    // Resolve Account IDs (Create if not exist)
-    const accountIds: Record<string, string> = {};
-    for (const acc of accountsData) {
-        const res = db.exec("SELECT id FROM accounts WHERE name = ?", [acc.name]);
-        if (res.length > 0) {
-            accountIds[acc.name] = res[0].values[0][0] as string;
-        } else {
-            const newId = `acc-dummy-${Date.now()}-${Math.floor(Math.random()*100000)}`;
-            db.run("INSERT INTO accounts (id, name, is_savings) VALUES (?, ?, ?)", [newId, acc.name, acc.isSavings]);
-            accountIds[acc.name] = newId;
-        }
-    }
-
-    // Resolve Category IDs (Create if not exist)
-    const categoryIds: Record<string, string> = {}; 
-    for (const cat of categoriesData) {
-        const res = db.exec("SELECT id FROM categories WHERE name = ? AND type = ?", [cat.name, cat.type]);
-        if (res.length > 0) {
-            categoryIds[`${cat.name}:${cat.type}`] = res[0].values[0][0] as string;
-        } else {
-            const newId = `cat-dummy-${Date.now()}-${Math.floor(Math.random()*100000)}`;
-            db.run("INSERT INTO categories (id, name, type, group_name) VALUES (?, ?, ?, ?)", [newId, cat.name, cat.type, cat.group]);
-            categoryIds[`${cat.name}:${cat.type}`] = newId;
-        }
-    }
-
-    // 2. Generate Transactions (12 Months)
-    const transactions = [];
-    const endDate = new Date();
-    const startDate = new Date();
-    startDate.setMonth(startDate.getMonth() - 12);
-    
-    // Helpers
-    const randInt = (min: number, max: number) => Math.floor(Math.random() * (max - min + 1)) + min;
-    
-    const getDateWithTime = (baseDate: Date, hour: number, min: number = 0) => {
-        const d = new Date(baseDate);
-        d.setHours(hour, min, 0, 0);
-        return d.toISOString();
-    };
-    
-    let currentDate = new Date(startDate);
-    
-    while (currentDate <= endDate) {
-        const day = currentDate.getDate();
-        const weekDay = currentDate.getDay(); // 0 = Sun, 6 = Sat
-        const isWeekend = weekDay === 0 || weekDay === 6;
-
-        // --- Monthly Recurring (Morning) ---
-        if (day === 1) {
-            transactions.push({
-                date: getDateWithTime(currentDate, 9, 0),
-                desc: 'Monthly Rent', amount: -1200, cat: 'Rent', type: 'Expense', acc: 'Main Checking'
-            });
-        }
-        if (day === 5) {
-            transactions.push({
-                date: getDateWithTime(currentDate, 10, 0),
-                desc: 'Internet Bill', amount: -60, cat: 'Internet', type: 'Expense', acc: 'Main Checking'
-            });
-        }
-        if (day === 15) {
-            transactions.push({
-                date: getDateWithTime(currentDate, 14, 0),
-                desc: 'Electric & Water', amount: -randInt(120, 180), cat: 'Utilities', type: 'Expense', acc: 'Main Checking'
-            });
-        }
-        if (day === 28) {
-            transactions.push({
-                date: getDateWithTime(currentDate, 9, 0),
-                desc: 'Salary', amount: 4500, cat: 'Salary', type: 'Income', acc: 'Main Checking'
-            });
-            // Auto Transfer to Savings
-            transactions.push({
-                date: getDateWithTime(currentDate, 9, 5),
-                desc: 'Savings Contribution', amount: -1000, cat: 'Transfer', type: 'Transfer', acc: 'Main Checking'
-            });
-            transactions.push({
-                date: getDateWithTime(currentDate, 9, 5), 
-                desc: 'Savings Contribution', amount: 1000, cat: 'Transfer', type: 'Transfer', acc: 'Savings'
-            });
-        }
-
-        // --- Daily/Weekly Variable ---
-        
-        if (Math.random() > 0.75) {
-             transactions.push({
-                date: getDateWithTime(currentDate, 17, 30),
-                desc: 'Supermarket', amount: -randInt(40, 150), cat: 'Groceries', type: 'Expense', acc: 'Main Checking'
-            });
-        }
-
-        if ((isWeekend && Math.random() > 0.3) || (!isWeekend && Math.random() > 0.8)) {
-             transactions.push({
-                date: getDateWithTime(currentDate, 20, 0),
-                desc: 'Restaurant / Cafe', amount: -randInt(15, 60), cat: 'Dining Out', type: 'Expense', acc: 'Credit Card'
-            });
-        }
-
-        if (!isWeekend && Math.random() > 0.6) {
-             transactions.push({
-                date: getDateWithTime(currentDate, 8, 30),
-                desc: 'Uber / Public Transport', amount: -randInt(10, 30), cat: 'Transport', type: 'Expense', acc: 'Credit Card'
-            });
-        }
-
-        if (day % 10 === 0 && Math.random() > 0.5) {
-             transactions.push({
-                date: getDateWithTime(currentDate, 15, 0),
-                desc: 'Amazon / Online Store', amount: -randInt(30, 150), cat: 'Shopping', type: 'Expense', acc: 'Credit Card'
-            });
-        }
-
-        if (day % 14 === 0 && Math.random() > 0.7) {
-             transactions.push({
-                date: getDateWithTime(currentDate, 11, 0),
-                desc: 'Freelance Project', amount: randInt(200, 800), cat: 'Freelance', type: 'Income', acc: 'Main Checking'
-            });
-        }
-
-        currentDate.setDate(currentDate.getDate() + 1);
-    }
-
-    const stmt = db.prepare(`
-        INSERT INTO transactions (id, date, description, amount, category_id, account_id, type)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-    `);
-
-    for (const t of transactions) {
-        const catKey = `${t.cat}:${t.type}`;
-        const catId = categoryIds[catKey];
-        const accId = accountIds[t.acc];
-
-        if (catId && accId) {
-            stmt.run([
-                `txn-dummy-${Date.now()}-${Math.random().toString(36).substring(2, 10)}`,
-                t.date, 
-                t.desc,
-                t.amount,
-                catId,
-                accId,
-                t.type
-            ]);
-        }
-    }
-    stmt.free();
-
-    db.run("COMMIT");
-    await saveDB();
-
-  } catch (e) {
-    console.error("Dummy generation failed", e);
-    db.run("ROLLBACK");
-    throw e;
-  }
-};
-
 // --- Transactions ---
 
 export const insertTransactions = async (transactions: Transaction[]) => {
@@ -517,7 +268,6 @@ export const insertTransactions = async (transactions: Transaction[]) => {
   db.run("BEGIN TRANSACTION");
   
   try {
-    // 1. Resolve Accounts 
     const accountMap = new Map<string, string>(); 
     const uniqueAccounts = new Set<string>();
     
@@ -547,7 +297,6 @@ export const insertTransactions = async (transactions: Transaction[]) => {
          }
     }
 
-    // 2. Resolve Categories
     const categoryMap = new Map<string, string>();
     const catKeys: {name: string, type: string}[] = [];
     
@@ -572,7 +321,6 @@ export const insertTransactions = async (transactions: Transaction[]) => {
         categoryMap.set(`${k.name}:${k.type}`, id);
     }
 
-    // 3. Insert Transactions
     const insertTxn = db.prepare(`
       INSERT OR REPLACE INTO transactions (id, date, description, amount, category_id, account_id, type) 
       VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -592,7 +340,6 @@ export const insertTransactions = async (transactions: Transaction[]) => {
         }
         
         const finalCatId = catId || null;
-
         insertTxn.run([t.id, t.date, t.description, t.amount, finalCatId, accId, t.type]);
     }
     
@@ -833,6 +580,39 @@ export const deleteAccount = async (id: string): Promise<boolean> => {
   return true;
 };
 
+// --- Import Templates ---
+
+export const getImportTemplates = (): ImportTemplate[] => {
+  if (!db) return [];
+  try {
+    const res = db.exec("SELECT * FROM import_templates ORDER BY name ASC");
+    if (res.length === 0) return [];
+    return res[0].values.map((row: any[]) => ({
+      id: row[0],
+      name: row[1],
+      amountMode: row[2] as 'single' | 'split',
+      mapping: JSON.parse(row[3])
+    }));
+  } catch(e) { return []; }
+};
+
+export const saveImportTemplate = async (template: ImportTemplate) => {
+  if (!db) return;
+  db.run("INSERT OR REPLACE INTO import_templates (id, name, amount_mode, mapping_json) VALUES (?, ?, ?, ?)", [
+    template.id,
+    template.name,
+    template.amountMode,
+    JSON.stringify(template.mapping)
+  ]);
+  await saveDB();
+};
+
+export const deleteImportTemplate = async (id: string) => {
+  if (!db) return;
+  db.run("DELETE FROM import_templates WHERE id = ?", [id]);
+  await saveDB();
+};
+
 // --- Configs ---
 
 export const getApiKey = (): string | null => {
@@ -1035,4 +815,248 @@ const saveToIndexedDB = (data: Uint8Array | EncryptedData): Promise<void> => {
     
     request.onerror = () => reject(request.error);
   });
+};
+
+export const getTransactionCount = (): number => {
+  if (!db) return 0;
+  try {
+    const res = db.exec("SELECT count(*) FROM transactions");
+    if (res.length > 0) {
+        return res[0].values[0][0];
+    }
+    return 0;
+  } catch(e) {
+    return 0;
+  }
+};
+
+export const getExistingSignatures = (): Set<string> => {
+  if (!db) return new Set();
+  try {
+    const res = db.exec("SELECT date, amount, description FROM transactions");
+    if (res.length === 0) return new Set();
+
+    const values = res[0].values;
+    const signatures = new Set<string>();
+
+    values.forEach((row: any[]) => {
+      const t = {
+        date: row[0],
+        amount: row[1],
+        description: row[2]
+      } as Transaction;
+      signatures.add(generateTransactionSignature(t));
+    });
+
+    return signatures;
+  } catch (e) {
+    console.error("Error fetching existing signatures", e);
+    return new Set();
+  }
+};
+
+export const getCategorySuggestions = (): Record<string, string> => {
+  if (!db) return {};
+  try {
+    const sql = `
+      SELECT t.description, c.name 
+      FROM transactions t
+      JOIN categories c ON t.category_id = c.id
+      WHERE t.description IS NOT NULL AND t.description != ''
+      ORDER BY t.date ASC, t.id ASC
+    `;
+    const res = db.exec(sql);
+    if (res.length === 0) return {};
+
+    const map: Record<string, string> = {};
+    const values = res[0].values;
+    
+    values.forEach((row: any[]) => {
+      const desc = String(row[0] || '').trim().toLowerCase();
+      const cat = String(row[1] || '');
+      if (desc && cat) {
+        map[desc] = cat; 
+      }
+    });
+    return map;
+  } catch (e) {
+    console.error("Error fetching category suggestions", e);
+    return {};
+  }
+};
+
+export const generateDummyData = async () => {
+  if (!db) return;
+
+  db.run("BEGIN TRANSACTION");
+
+  try {
+    const accountsData = [
+        { name: 'Main Checking', isSavings: 0 },
+        { name: 'Savings', isSavings: 1 },
+        { name: 'Credit Card', isSavings: 0 }
+    ];
+
+    const categoriesData = [
+        { name: 'Salary', type: 'Income', group: 'Recurring' },
+        { name: 'Freelance', type: 'Income', group: 'General' },
+        { name: 'Rent', type: 'Expense', group: 'Recurring' },
+        { name: 'Utilities', type: 'Expense', group: 'Recurring' },
+        { name: 'Internet', type: 'Expense', group: 'Recurring' },
+        { name: 'Groceries', type: 'Expense', group: 'General' },
+        { name: 'Dining Out', type: 'Expense', group: 'General' },
+        { name: 'Transport', type: 'Expense', group: 'General' },
+        { name: 'Entertainment', type: 'Expense', group: 'General' },
+        { name: 'Shopping', type: 'Expense', group: 'General' },
+        { name: 'Health', type: 'Expense', group: 'General' },
+        { name: 'Transfer', type: 'Transfer', group: 'General' }
+    ];
+
+    const accountIds: Record<string, string> = {};
+    for (const acc of accountsData) {
+        const res = db.exec("SELECT id FROM accounts WHERE name = ?", [acc.name]);
+        if (res.length > 0) {
+            accountIds[acc.name] = res[0].values[0][0] as string;
+        } else {
+            const newId = `acc-dummy-${Date.now()}-${Math.floor(Math.random()*100000)}`;
+            db.run("INSERT INTO accounts (id, name, is_savings) VALUES (?, ?, ?)", [newId, acc.name, acc.isSavings]);
+            accountIds[acc.name] = newId;
+        }
+    }
+
+    const categoryIds: Record<string, string> = {}; 
+    for (const cat of categoriesData) {
+        const res = db.exec("SELECT id FROM categories WHERE name = ? AND type = ?", [cat.name, cat.type]);
+        if (res.length > 0) {
+            categoryIds[`${cat.name}:${cat.type}`] = res[0].values[0][0] as string;
+        } else {
+            const newId = `cat-dummy-${Date.now()}-${Math.floor(Math.random()*100000)}`;
+            db.run("INSERT INTO categories (id, name, type, group_name) VALUES (?, ?, ?, ?)", [newId, cat.name, cat.type, cat.group]);
+            categoryIds[`${cat.name}:${cat.type}`] = newId;
+        }
+    }
+
+    const transactions = [];
+    const endDate = new Date();
+    const startDate = new Date();
+    startDate.setMonth(startDate.getMonth() - 12);
+    
+    const randInt = (min: number, max: number) => Math.floor(Math.random() * (max - min + 1)) + min;
+    
+    const getDateWithTime = (baseDate: Date, hour: number, min: number = 0) => {
+        const d = new Date(baseDate);
+        d.setHours(hour, min, 0, 0);
+        return d.toISOString();
+    };
+    
+    let currentDate = new Date(startDate);
+    
+    while (currentDate <= endDate) {
+        const day = currentDate.getDate();
+        const weekDay = currentDate.getDay();
+        const isWeekend = weekDay === 0 || weekDay === 6;
+
+        if (day === 1) {
+            transactions.push({
+                date: getDateWithTime(currentDate, 9, 0),
+                desc: 'Monthly Rent', amount: -1200, cat: 'Rent', type: 'Expense', acc: 'Main Checking'
+            });
+        }
+        if (day === 5) {
+            transactions.push({
+                date: getDateWithTime(currentDate, 10, 0),
+                desc: 'Internet Bill', amount: -60, cat: 'Internet', type: 'Expense', acc: 'Main Checking'
+            });
+        }
+        if (day === 15) {
+            transactions.push({
+                date: getDateWithTime(currentDate, 14, 0),
+                desc: 'Electric & Water', amount: -randInt(120, 180), cat: 'Utilities', type: 'Expense', acc: 'Main Checking'
+            });
+        }
+        if (day === 28) {
+            transactions.push({
+                date: getDateWithTime(currentDate, 9, 0),
+                desc: 'Salary', amount: 4500, cat: 'Salary', type: 'Income', acc: 'Main Checking'
+            });
+            transactions.push({
+                date: getDateWithTime(currentDate, 9, 5),
+                desc: 'Savings Contribution', amount: -1000, cat: 'Transfer', type: 'Transfer', acc: 'Main Checking'
+            });
+            transactions.push({
+                date: getDateWithTime(currentDate, 9, 5), 
+                desc: 'Savings Contribution', amount: 1000, cat: 'Transfer', type: 'Transfer', acc: 'Savings'
+            });
+        }
+
+        if (Math.random() > 0.75) {
+             transactions.push({
+                date: getDateWithTime(currentDate, 17, 30),
+                desc: 'Supermarket', amount: -randInt(40, 150), cat: 'Groceries', type: 'Expense', acc: 'Main Checking'
+            });
+        }
+
+        if ((isWeekend && Math.random() > 0.3) || (!isWeekend && Math.random() > 0.8)) {
+             transactions.push({
+                date: getDateWithTime(currentDate, 20, 0),
+                desc: 'Restaurant / Cafe', amount: -randInt(15, 60), cat: 'Dining Out', type: 'Expense', acc: 'Credit Card'
+            });
+        }
+
+        if (!isWeekend && Math.random() > 0.6) {
+             transactions.push({
+                date: getDateWithTime(currentDate, 8, 30),
+                desc: 'Uber / Public Transport', amount: -randInt(10, 30), cat: 'Transport', type: 'Expense', acc: 'Credit Card'
+            });
+        }
+
+        if (day % 10 === 0 && Math.random() > 0.5) {
+             transactions.push({
+                date: getDateWithTime(currentDate, 15, 0),
+                desc: 'Amazon / Online Store', amount: -randInt(30, 150), cat: 'Shopping', type: 'Expense', acc: 'Credit Card'
+            });
+        }
+
+        if (day % 14 === 0 && Math.random() > 0.7) {
+             transactions.push({
+                date: getDateWithTime(currentDate, 11, 0),
+                desc: 'Freelance Project', amount: randInt(200, 800), cat: 'Freelance', type: 'Income', acc: 'Main Checking'
+            });
+        }
+
+        currentDate.setDate(currentDate.getDate() + 1);
+    }
+
+    const stmt = db.prepare(`
+        INSERT INTO transactions (id, date, description, amount, category_id, account_id, type)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    for (const t of transactions) {
+        const catKey = `${t.cat}:${t.type}`;
+        const catId = categoryIds[catKey];
+        const accId = accountIds[t.acc];
+
+        if (catId && accId) {
+            stmt.run([
+                `txn-dummy-${Date.now()}-${Math.random().toString(36).substring(2, 10)}`,
+                t.date, 
+                t.desc,
+                t.amount,
+                catId,
+                accId,
+                t.type
+            ]);
+        }
+    }
+    stmt.free();
+
+    db.run("COMMIT");
+    await saveDB();
+
+  } catch (e) {
+    console.error("Dummy generation failed", e);
+    db.run("ROLLBACK");
+    throw e;
+  }
 };
