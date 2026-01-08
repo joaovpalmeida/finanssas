@@ -1,3 +1,4 @@
+
 import React, { useCallback, useState, useMemo, useEffect } from 'react';
 import { Upload, FileSpreadsheet, Loader2, AlertCircle, ArrowRight, Settings, Layers, ChevronRight, ArrowLeft, Table, Calendar, Columns, ArrowDownToLine, ArrowUpFromLine, Eye, Type, Tag, CheckSquare, Square, AlertTriangle, Edit2, Copy, X, Sparkles, List, Save, Bookmark, CheckCircle } from 'lucide-react';
 import { getExcelColumns, getExcelSheetNames, parseExcelFile, ColumnMapping, ExcelColumn } from '../utils/excelParser';
@@ -32,7 +33,6 @@ export const FileUpload: React.FC<FileUploadProps> = ({
   defaultDecimalSeparator 
 }) => {
   const [isDragging, setIsDragging] = useState(false);
-  const [accountName, setAccountName] = useState(accounts.length > 0 ? accounts[0].name : 'Main Account');
   const [defaultDate, setDefaultDate] = useState(new Date().toISOString().split('T')[0]);
   
   const [step, setStep] = useState<'upload' | 'sheet-selection' | 'mapping' | 'preview' | 'success'>('upload');
@@ -84,6 +84,8 @@ export const FileUpload: React.FC<FileUploadProps> = ({
     expenseDescription: '',
     incomeCategory: '',
     expenseCategory: '',
+    account: '',
+    staticAccountName: accounts.length > 0 ? accounts[0].name : 'Main Account',
     startRow: 2,
     endRow: undefined,
     incomeStartRow: 2,
@@ -97,9 +99,10 @@ export const FileUpload: React.FC<FileUploadProps> = ({
       setMapping(prev => ({
           ...prev,
           dateFormat: defaultDateFormat || prev.dateFormat,
-          decimalSeparator: defaultDecimalSeparator || prev.decimalSeparator
+          decimalSeparator: defaultDecimalSeparator || prev.decimalSeparator,
+          staticAccountName: prev.staticAccountName || (accounts.length > 0 ? accounts[0].name : 'Main Account')
       }));
-  }, [defaultDateFormat, defaultDecimalSeparator]);
+  }, [defaultDateFormat, defaultDecimalSeparator, accounts]);
 
   // Load templates on mount or when mapping step starts
   useEffect(() => {
@@ -135,6 +138,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({
       expense: findIndex(/expense|debit|withdrawal/i),
       category: findIndex(/category|type/i),
       account: findIndex(/account|bank|source/i),
+      staticAccountName: mapping.staticAccountName,
       manualDescription: '',
       manualCategory: '',
       startRow: 2,
@@ -208,7 +212,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({
     setIsParsing(true);
     setParseError(null);
     try {
-        const data = await parseExcelFile(file, accountName, mapping, selectedSheet, defaultDate);
+        const data = await parseExcelFile(file, mapping.staticAccountName || 'Main Account', mapping, selectedSheet, defaultDate);
         if (data.length === 0) {
              setParseError("No valid transactions found with the current mapping. Please check row ranges and column selections.");
         } else {
@@ -298,9 +302,6 @@ export const FileUpload: React.FC<FileUploadProps> = ({
 
     await saveImportTemplate(template);
     setShowSaveTemplateModal(false);
-    // After template is handled, the user might want to continue or be redirected
-    // Usually, success means they are done. 
-    // We'll leave it in the success state for a moment.
   };
 
   const hasMappingChanged = useMemo(() => {
@@ -325,6 +326,8 @@ export const FileUpload: React.FC<FileUploadProps> = ({
       decimalSeparator: defaultDecimalSeparator || '.', 
       description: '', amount: '', income: '', expense: '', category: '', 
       manualDescription: '', manualCategory: '', manualIncomeCategory: '', manualExpenseCategory: '',
+      account: '',
+      staticAccountName: accounts.length > 0 ? accounts[0].name : 'Main Account',
       startRow: 2, incomeStartRow: 2, expenseStartRow: 2 
     });
   };
@@ -491,7 +494,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({
         </div>
         <h3 className="text-2xl font-bold text-slate-800 mb-2">Import Successful!</h3>
         <p className="text-slate-600 mb-8">
-          Successfully imported <strong>{importSummary?.count}</strong> transactions into <strong>{accountName}</strong>.
+          Successfully imported <strong>{importSummary?.count}</strong> transactions into <strong>{mapping.staticAccountName}</strong>.
         </p>
 
         {(shouldPromptNew || shouldPromptUpdate) ? (
@@ -1045,8 +1048,8 @@ export const FileUpload: React.FC<FileUploadProps> = ({
                    <input 
                         type="text"
                         list="account-suggestions"
-                        value={accountName}
-                        onChange={(e) => setAccountName(e.target.value)}
+                        value={mapping.staticAccountName || ''}
+                        onChange={(e) => setMapping({...mapping, staticAccountName: e.target.value})}
                         placeholder="Target Account Name"
                         className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white text-base sm:text-sm"
                         disabled={!!mapping.account}

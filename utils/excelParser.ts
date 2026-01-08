@@ -1,3 +1,4 @@
+
 import * as XLSX from 'xlsx';
 import { Transaction, TransactionType } from '../types';
 
@@ -32,6 +33,7 @@ export interface ColumnMapping {
   manualExpenseCategory?: string;
   
   account?: string;
+  staticAccountName?: string; // Static fallback account name
 
   // Row selection (Global / Single Mode)
   startRow?: number; // 1-based index from UI
