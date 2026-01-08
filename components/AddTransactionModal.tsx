@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo, useId } from 'react';
 import { X, Save, Calendar, Tag, CreditCard, DollarSign, Type, ArrowRightLeft, ArrowUpCircle, ArrowDownCircle, ArrowRight, ChevronDown, List, Plus, Scale } from 'lucide-react';
 import { Transaction, TransactionType, Category, Account } from '../types';
@@ -11,6 +12,7 @@ interface AddTransactionModalProps {
   accounts: Account[];
   initialData?: Partial<Transaction> | null;
   decimalSeparator: '.' | ',';
+  notify: (msg: string, type?: 'success' | 'error' | 'info') => void;
 }
 
 const AccountField = ({ 
@@ -43,7 +45,7 @@ const AccountField = ({
         // If we have a value but it's not an ID, switch to input mode (mostly for edit case where data might be missing or custom)
         setMode('input');
     }
-  }, [allowCreation, value, isExistingId]);
+  }, [allowCreation, value, isExistingId, mode]);
 
   const savings = accounts.filter(a => a.isSavings);
   const regular = accounts.filter(a => !a.isSavings);
@@ -125,7 +127,8 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
   categories,
   accounts,
   initialData,
-  decimalSeparator
+  decimalSeparator,
+  notify
 }) => {
   const [transferDir, setTransferDir] = useState<'in' | 'out'>('out');
   const [toAccountId, setToAccountId] = useState('');
@@ -180,14 +183,14 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
         setToAccountId(availableDest ? availableDest.id : '');
       }
     }
-  }, [isOpen, initialData, accounts, decimalSeparator]);
+  }, [isOpen, initialData, accounts, decimalSeparator, isEditing]);
 
   useEffect(() => {
     if (!isEditing && formData.type === TransactionType.TRANSFER && formData.accountId === toAccountId) {
         const other = accounts.find(a => a.id !== formData.accountId);
         if (other) setToAccountId(other.id);
     }
-  }, [formData.accountId, formData.type, isEditing, accounts]);
+  }, [formData.accountId, formData.type, isEditing, accounts, toAccountId]);
 
   const filteredCategories = useMemo(() => {
     return categories.filter(c => c.type === formData.type);
@@ -203,26 +206,13 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
     e.preventDefault();
     if (!formData.amount) return;
 
-    // Helper: Determine if we have an ID or Name for Account
-    // If it's a UUID-like ID, it's an ID. If it's just text, it's a Name to be created.
-    // However, DB `insertTransactions` logic handles:
-    // "If `accountId` matches an existing ID -> Use it."
-    // "If not, treat `account` (name) field."
-    // BUT we are using the new schema.
-    // The Modal now primarily works with IDs. If user typed a NEW name, `formData.accountId` holds the NAME.
-    // We need to pass that as `account` (name) to `insertTransactions` so it creates it, 
-    // and clear `accountId` so it doesn't try to use it as a FK.
-    
     const resolveAccountPayload = (val: string) => {
         const exists = accounts.some(a => a.id === val);
-        if (exists) return { accountId: val, account: '' }; // It's an ID
-        return { accountId: '', account: val }; // It's a new Name
+        if (exists) return { accountId: val, account: '' }; 
+        return { accountId: '', account: val }; 
     };
 
     const resolveCategoryPayload = (val: string) => {
-        // Since category input is a datalist of Names (not IDs), we always receive a Name here currently?
-        // Wait, the input below uses `list="category-list"`. It outputs the value string (Name).
-        // We need to map Name -> ID if possible.
         const catObj = categories.find(c => c.name === val && c.type === formData.type);
         if (catObj) return { categoryId: catObj.id, category: '' };
         return { categoryId: '', category: val };
@@ -250,7 +240,7 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
         const destInfo = resolveAccountPayload(toAccountId);
 
         if (srcInfo.accountId && destInfo.accountId && srcInfo.accountId === destInfo.accountId) {
-             alert("Source and Destination accounts cannot be the same.");
+             notify("Source and Destination cannot be the same", "error");
              return;
         }
 
@@ -279,7 +269,7 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
         if (formData.type === TransactionType.EXPENSE) finalAmount = -Math.abs(finalAmount);
         else if (formData.type === TransactionType.INCOME) finalAmount = Math.abs(finalAmount);
         else if (formData.type === TransactionType.TRANSFER) finalAmount = transferDir === 'out' ? -Math.abs(finalAmount) : Math.abs(finalAmount);
-        else if (formData.type === TransactionType.BALANCE) finalAmount = Math.abs(finalAmount); // Default positive for adjustment, unless user explicitly types negative (which input might restrict depending on UX, but here we assume add balance)
+        else if (formData.type === TransactionType.BALANCE) finalAmount = Math.abs(finalAmount); 
 
         const accInfo = resolveAccountPayload(formData.accountId);
 

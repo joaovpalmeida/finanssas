@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useMemo, Suspense } from 'react';
-import { Wallet, Loader2, Plus, Settings, Target, Search, Home, Menu, X, BarChart3, Sparkles, HelpCircle } from 'lucide-react';
+
+import React, { useState, useEffect, useMemo, Suspense, useCallback } from 'react';
+import { Wallet, Loader2, Plus, Settings, Target, Search, Home, Menu, X, BarChart3, Sparkles, HelpCircle, CheckCircle, AlertCircle, Info } from 'lucide-react';
 import { Transaction, Account, Category } from './types';
 import { initDB, insertTransactions, getAllTransactions, resetDB, exportDatabaseBlob, deleteTransaction, getAccounts, getCategories, importDatabase, unlockDB, DBStatus, getImportConfig } from './services/db';
 import { calculateRunningBalances, aggregateData } from './utils/helpers';
@@ -14,6 +15,13 @@ const LandingPage = React.lazy(() => import('./components/LandingPage').then(mod
 const TransactionSearch = React.lazy(() => import('./components/TransactionSearch').then(module => ({ default: module.TransactionSearch })));
 const AddTransactionModal = React.lazy(() => import('./components/AddTransactionModal').then(module => ({ default: module.AddTransactionModal })));
 const HelpPage = React.lazy(() => import('./components/HelpPage').then(module => ({ default: module.HelpPage })));
+
+// Toast Notification Type
+interface Toast {
+  id: number;
+  message: string;
+  type: 'success' | 'error' | 'info';
+}
 
 // Loading Fallback Component
 const PageLoader = () => (
@@ -31,8 +39,8 @@ function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [dbStatus, setDbStatus] = useState<DBStatus>('LOADING');
   const [error, setError] = useState<string | null>(null);
+  const [toasts, setToasts] = useState<Toast[]>([]);
   
-  // 'landing' is now the default
   const [activeTab, setActiveTab] = useState<'landing' | 'dashboard' | 'search' | 'insights' | 'savings' | 'admin' | 'help'>('landing');
   
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -42,6 +50,14 @@ function App() {
   // App Settings
   const [decimalSeparator, setDecimalSeparator] = useState<'.' | ','>('.');
   const [dateFormat, setDateFormat] = useState<string>('YYYY-MM-DD');
+
+  const notify = useCallback((message: string, type: 'success' | 'error' | 'info' = 'info') => {
+    const id = Date.now();
+    setToasts(prev => [...prev, { id, message, type }]);
+    setTimeout(() => {
+      setToasts(prev => prev.filter(t => t.id !== id));
+    }, 4000);
+  }, []);
 
   useEffect(() => {
     const setupDB = async () => {
@@ -80,6 +96,7 @@ function App() {
       if (success) {
           setDbStatus('READY');
           refreshTransactions();
+          notify("Database unlocked", "success");
           return true;
       }
       return false;
@@ -95,13 +112,15 @@ function App() {
     setIsLoading(true);
     setError(null);
     try {
-      await insertTransactions(data); // Save to SQLite and auto-create categories/accounts
+      await insertTransactions(data); 
       refreshTransactions();
-      alert(`Successfully imported ${data.length} transactions.`);
-      setActiveTab('dashboard'); // Redirect to dashboard after upload
+      notify(`Successfully imported ${data.length} transactions.`, "success");
+      // REMOVED: Redirect to Dashboard. 
+      // We stay on the current tab so the FileUpload component can show its Success/Template screen.
     } catch (err) {
       console.error(err);
       setError("Failed to save transactions to database.");
+      notify("Import failed", "error");
     } finally {
       setIsLoading(false);
     }
@@ -111,13 +130,14 @@ function App() {
     await insertTransactions(newTransactions);
     refreshTransactions();
     setEditingTransaction(null);
-    // If adding a transaction via the modal from another tab, stay there, otherwise go to dashboard
+    notify("Transaction saved", "success");
     if (activeTab === 'landing') setActiveTab('dashboard');
   };
 
   const handleDeleteTransaction = async (id: string) => {
     await deleteTransaction(id);
     refreshTransactions();
+    notify("Transaction deleted", "info");
   };
 
   const handleEditClick = (t: Transaction) => {
@@ -132,6 +152,7 @@ function App() {
       setAccounts([]);
       setCategories([]);
       setError(null);
+      notify("System reset complete", "info");
     }
   };
 
@@ -146,6 +167,7 @@ function App() {
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
+      notify("Backup downloaded", "success");
     }
   };
 
@@ -155,11 +177,11 @@ function App() {
         try {
             await importDatabase(file);
             refreshTransactions();
-            alert("Database restored successfully.");
+            notify("Database restored successfully", "success");
             setActiveTab('dashboard');
         } catch (e: any) {
             console.error(e);
-            alert("Failed to restore database: " + e.message);
+            notify("Failed to restore: " + e.message, "error");
         } finally {
             setIsLoading(false);
         }
@@ -199,6 +221,31 @@ function App() {
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
+      {/* Toast Notification Container */}
+      <div className="fixed bottom-6 right-6 z-[100] flex flex-col gap-2 w-full max-w-xs pointer-events-none">
+        {toasts.map(toast => (
+          <div 
+            key={toast.id}
+            className={`pointer-events-auto flex items-center p-4 rounded-xl shadow-2xl border animate-slide-in-right ${
+              toast.type === 'success' ? 'bg-emerald-600 border-emerald-500 text-white' :
+              toast.type === 'error' ? 'bg-red-600 border-red-500 text-white' :
+              'bg-slate-800 border-slate-700 text-white'
+            }`}
+          >
+            {toast.type === 'success' && <CheckCircle className="w-5 h-5 mr-3 flex-shrink-0" />}
+            {toast.type === 'error' && <AlertCircle className="w-5 h-5 mr-3 flex-shrink-0" />}
+            {toast.type === 'info' && <Info className="w-5 h-5 mr-3 flex-shrink-0" />}
+            <span className="text-sm font-medium">{toast.message}</span>
+            <button 
+              onClick={() => setToasts(prev => prev.filter(t => t.id !== toast.id))}
+              className="ml-auto pl-3 opacity-70 hover:opacity-100 transition-opacity"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        ))}
+      </div>
+
       {/* Header */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm/50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
@@ -340,6 +387,7 @@ function App() {
                 accountBalances={accountBalances} 
                 decimalSeparator={decimalSeparator}
                 dateFormat={dateFormat}
+                notify={notify}
               />
             )}
             {activeTab === 'admin' && (
@@ -353,6 +401,7 @@ function App() {
                 uploadError={error}
                 decimalSeparator={decimalSeparator}
                 dateFormat={dateFormat}
+                notify={notify}
               />
             )}
             {activeTab === 'help' && <HelpPage />}
@@ -373,6 +422,7 @@ function App() {
             accounts={accounts}
             initialData={editingTransaction}
             decimalSeparator={decimalSeparator}
+            notify={notify}
           />
         )}
       </Suspense>

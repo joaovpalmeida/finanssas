@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { Download, Trash2, Settings, Tag, CreditCard, Edit2, Save, X, UploadCloud, AlertTriangle, Upload, Wand2, Key, PiggyBank, Plus, CalendarRange, Lock, Unlock, Hash, Calendar, Bookmark } from 'lucide-react';
 import { SqlConsole } from './SqlConsole';
@@ -15,6 +16,7 @@ interface AdminPageProps {
   uploadError: string | null;
   decimalSeparator: '.' | ',';
   dateFormat: string;
+  notify: (msg: string, type?: 'success' | 'error' | 'info') => void;
 }
 
 export const AdminPage: React.FC<AdminPageProps> = ({ 
@@ -26,7 +28,8 @@ export const AdminPage: React.FC<AdminPageProps> = ({
   isUploading, 
   uploadError,
   decimalSeparator,
-  dateFormat
+  dateFormat,
+  notify
 }) => {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -81,10 +84,10 @@ export const AdminPage: React.FC<AdminPageProps> = ({
     try {
       await generateDummyData();
       refreshData();
-      alert("Dummy data generated successfully!");
+      notify("Dummy data generated successfully!", "success");
     } catch (e) {
       console.error(e);
-      alert("Failed to generate data.");
+      notify("Failed to generate data.", "error");
     } finally {
       setGenerating(false);
     }
@@ -95,19 +98,19 @@ export const AdminPage: React.FC<AdminPageProps> = ({
     try {
         await saveApiKey(apiKey);
         setIsKeySaved(true);
-        alert("API Key saved successfully.");
+        notify("API Key saved successfully.", "success");
     } catch (e) {
         console.error(e);
-        alert("Failed to save API Key");
+        notify("Failed to save API Key", "error");
     }
   };
 
   const handleSaveFiscalConfig = async () => {
       try {
           await saveFiscalConfig(fiscalConfig);
-          alert("Fiscal period configuration saved.");
+          notify("Fiscal period configuration saved.", "success");
       } catch (e) {
-          alert("Failed to save config.");
+          notify("Failed to save config.", "error");
       }
   };
 
@@ -115,8 +118,9 @@ export const AdminPage: React.FC<AdminPageProps> = ({
       try {
           await saveImportConfig({ decimalSeparator: val });
           refreshData();
+          notify("Settings updated", "info");
       } catch (e) {
-          alert("Failed to save setting");
+          notify("Failed to save setting", "error");
       }
   };
 
@@ -124,8 +128,9 @@ export const AdminPage: React.FC<AdminPageProps> = ({
       try {
           await saveImportConfig({ dateFormat: val });
           refreshData();
+          notify("Settings updated", "info");
       } catch (e) {
-          alert("Failed to save setting");
+          notify("Failed to save setting", "error");
       }
   };
 
@@ -134,8 +139,9 @@ export const AdminPage: React.FC<AdminPageProps> = ({
     try {
         await createAccount(name.trim(), isSavings);
         refreshData();
+        notify("Account created", "success");
     } catch (e: any) {
-        alert("Failed to create account: " + e.message);
+        notify("Failed to create account: " + e.message, "error");
     }
   };
 
@@ -144,8 +150,9 @@ export const AdminPage: React.FC<AdminPageProps> = ({
       try {
           await createCategory(name.trim(), type, group);
           refreshData();
+          notify("Category created", "success");
       } catch (e: any) {
-          alert("Failed to create category: " + e.message);
+          notify("Failed to create category: " + e.message, "error");
       }
   };
 
@@ -153,6 +160,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
     if (confirm("Are you sure you want to delete this import template?")) {
       await deleteImportTemplate(id);
       refreshData();
+      notify("Template deleted", "info");
     }
   };
 
@@ -162,16 +170,17 @@ export const AdminPage: React.FC<AdminPageProps> = ({
               await removeDatabasePassword();
               setIsEncrypted(false);
               setSecurityPass('');
+              notify("Encryption disabled", "info");
           }
       } else {
           if (!securityPass) {
-              alert("Please enter a password to enable encryption.");
+              notify("Please enter a password", "error");
               return;
           }
           await setDatabasePassword(securityPass);
           setIsEncrypted(true);
           setSecurityPass('');
-          alert("Encryption enabled. You will be asked for this password next time you load the app.");
+          notify("Encryption enabled", "success");
       }
   };
 
@@ -548,8 +557,9 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                try {
                    await deleteAccount(id); 
                    refreshData();
+                   notify("Account deleted", "info");
                } catch (e: any) {
-                   alert(e.message);
+                   notify(e.message, "error");
                }
             }} 
           />
@@ -568,8 +578,9 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                try {
                    await deleteCategory(id); 
                    refreshData();
+                   notify("Category deleted", "info");
                } catch (e: any) {
-                   alert(e.message);
+                   notify(e.message, "error");
                }
              }}
           />
@@ -767,10 +778,10 @@ const CategoryList: React.FC<{
                 </div>
             </div>
             <div className="flex items-center space-x-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                <button onClick={() => handleStartEdit(cat)} className="text-slate-400 hover:text-blue-600" title="Edit">
+                <button onClick={handleStartEdit.bind(null, cat)} className="text-slate-400 hover:text-blue-600" title="Edit">
                     <Edit2 className="w-3.5 h-3.5" />
                 </button>
-                <button onClick={() => onDelete(cat.id)} className="text-slate-400 hover:text-red-600" title="Delete">
+                <button onClick={onDelete.bind(null, cat.id)} className="text-slate-400 hover:text-red-600" title="Delete">
                     <Trash2 className="w-3.5 h-3.5" />
                 </button>
             </div>

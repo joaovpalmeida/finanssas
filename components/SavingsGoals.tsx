@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Target, Calendar, Plus, Trash2, TrendingUp, AlertCircle, CheckCircle, Edit2, X } from 'lucide-react';
 import { SavingsGoal } from '../types';
@@ -8,12 +9,14 @@ interface SavingsGoalsProps {
   accountBalances: { account: string; balance: number }[];
   decimalSeparator: '.' | ',';
   dateFormat: string;
+  notify: (msg: string, type?: 'success' | 'error' | 'info') => void;
 }
 
 export const SavingsGoals: React.FC<SavingsGoalsProps> = ({ 
   accountBalances, 
   decimalSeparator,
-  dateFormat 
+  dateFormat,
+  notify
 }) => {
   const [goals, setGoals] = useState<SavingsGoal[]>([]);
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -74,7 +77,10 @@ export const SavingsGoals: React.FC<SavingsGoalsProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.name || !formData.targetAmount || !formData.deadline || formData.targetAccounts.length === 0) return;
+    if (!formData.name || !formData.targetAmount || !formData.deadline || formData.targetAccounts.length === 0) {
+      notify("Please fill all required fields", "error");
+      return;
+    }
 
     const goal: SavingsGoal = {
       id: editingId || `goal-${Date.now()}`,
@@ -85,6 +91,7 @@ export const SavingsGoals: React.FC<SavingsGoalsProps> = ({
     };
 
     await insertSavingsGoal(goal);
+    notify(editingId ? "Goal updated" : "Goal created", "success");
     resetForm();
     loadGoals();
   };
@@ -92,6 +99,7 @@ export const SavingsGoals: React.FC<SavingsGoalsProps> = ({
   const handleDelete = async (id: string) => {
     if (confirm('Delete this goal?')) {
       await deleteSavingsGoal(id);
+      notify("Goal removed", "info");
       loadGoals();
     }
   };
