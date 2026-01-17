@@ -384,7 +384,7 @@ export const getAllTransactions = (): Transaction[] => {
       amount: row[3],
       type: row[4],
       categoryId: row[5],
-      category: row[6] || 'Unknown', 
+      category: row[6] || 'Uncategorized', 
       accountId: row[7],
       account: row[8] || 'Unknown' 
     } as Transaction));
@@ -464,7 +464,7 @@ export const searchTransactions = (filters: SearchFilters): Transaction[] => {
         amount: row[3],
         type: row[4],
         categoryId: row[5],
-        category: row[6] || 'Unknown',
+        category: row[6] || 'Uncategorized',
         accountId: row[7],
         account: row[8] || 'Unknown'
       } as Transaction);
