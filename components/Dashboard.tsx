@@ -486,7 +486,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
             currency={currency}
           />
         ) : (
-          dateFilter !== 'all' && (
+          dateFilter !== 'all' && monthlyBudgets.length > 0 && (
             <StatCard 
               title="Projected Balance" 
               amount={projectedBalance} 
@@ -511,7 +511,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
         />
       </div>
 
-      {hasSavingsAccounts && dateFilter !== 'all' && (
+      {hasSavingsAccounts && dateFilter !== 'all' && monthlyBudgets.length > 0 && (
           <div className="grid grid-cols-1 gap-6">
               <StatCard 
                 title="Projected Balance after Budgets" 
