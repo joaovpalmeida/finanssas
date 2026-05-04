@@ -66,12 +66,26 @@ export interface SavingsGoal {
 export interface SearchFilters {
   keyword?: string;
   category?: string;
+  budgetTypeId?: string;
   account?: string;
   type?: string;
   startDate?: string;
   endDate?: string;
   minAmount?: string;
   maxAmount?: string;
+}
+
+export interface BudgetType {
+  id: string;
+  name: string;
+}
+
+export interface MonthlyBudget {
+  id: string;
+  month: string; // YYYY-MM
+  budgetTypeId: string;
+  amount: number;
+  budgetTypeName?: string; // Populated via join
 }
 
 export interface FiscalConfig {

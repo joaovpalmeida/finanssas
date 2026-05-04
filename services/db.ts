@@ -125,6 +125,20 @@ const initSchema = () => {
       targetAccount TEXT -- Stores JSON array of Account IDs
     );
 
+    CREATE TABLE IF NOT EXISTS budget_types (
+      id TEXT PRIMARY KEY,
+      name TEXT UNIQUE
+    );
+
+    CREATE TABLE IF NOT EXISTS monthly_budgets (
+      id TEXT PRIMARY KEY,
+      month TEXT,
+      budget_type_id TEXT,
+      amount REAL,
+      UNIQUE(month, budget_type_id),
+      FOREIGN KEY(budget_type_id) REFERENCES budget_types(id) ON DELETE CASCADE
+    );
+
     CREATE TABLE IF NOT EXISTS configs (
       key TEXT PRIMARY KEY,
       value TEXT
@@ -186,6 +200,19 @@ const migrateSchema = () => {
             WHERE account_id IS NULL AND account IS NOT NULL
          `);
       }
+    }
+
+    // 3. Budgets Migration
+    db.run(`CREATE TABLE IF NOT EXISTS budget_types (id TEXT PRIMARY KEY, name TEXT UNIQUE)`);
+    db.run(`CREATE TABLE IF NOT EXISTS monthly_budgets (id TEXT PRIMARY KEY, month TEXT, budget_type_id TEXT, amount REAL, UNIQUE(month, budget_type_id), FOREIGN KEY(budget_type_id) REFERENCES budget_types(id) ON DELETE CASCADE)`);
+    
+    const catRes = db.exec("PRAGMA table_info(categories)");
+    if (catRes.length > 0) {
+        const catCols = catRes[0].values.map((row: any[]) => row[1]);
+        if (!catCols.includes('budget_type_id')) {
+            console.log("Migrating schema: Adding budget_type_id to categories");
+            db.run("ALTER TABLE categories ADD COLUMN budget_type_id TEXT");
+        }
     }
     
     saveDB();
@@ -419,6 +446,11 @@ export const searchTransactions = (filters: SearchFilters): Transaction[] => {
     params.push(filters.category);
   }
 
+  if (filters.budgetTypeId) {
+    sql += " AND c.budget_type_id = ?";
+    params.push(filters.budgetTypeId);
+  }
+
   if (filters.account) {
     sql += " AND a.name = ?";
     params.push(filters.account);
@@ -511,19 +543,21 @@ export const getCategories = (): Category[] => {
       id: row[0], 
       name: row[1], 
       type: row[2] as TransactionType, 
-      group: row[3] as CategoryGroup 
+      group: row[3] as CategoryGroup,
+      budgetTypeId: row[4]
     }));
   } catch (e) { return []; }
 };
 
-export const createCategory = async (name: string, type: string, group: string) => {
+export const createCategory = async (name: string, type: string, group: string, budgetTypeId?: string) => {
   if (!db) return;
   try {
-    db.run("INSERT INTO categories (id, name, type, group_name) VALUES (?, ?, ?, ?)", [
+    db.run("INSERT INTO categories (id, name, type, group_name, budget_type_id) VALUES (?, ?, ?, ?, ?)", [
       `cat-${Date.now()}-${Math.random()}`,
       name,
       type,
-      group
+      group,
+      budgetTypeId || null
     ]);
     await saveDB();
   } catch(e: any) {
@@ -534,9 +568,9 @@ export const createCategory = async (name: string, type: string, group: string) 
   }
 };
 
-export const updateCategory = async (id: string, newName: string, newType: string, group: string) => {
+export const updateCategory = async (id: string, newName: string, newType: string, group: string, budgetTypeId?: string) => {
   if (!db) return;
-  db.run("UPDATE categories SET name = ?, type = ?, group_name = ? WHERE id = ?", [newName, newType, group, id]);
+  db.run("UPDATE categories SET name = ?, type = ?, group_name = ?, budget_type_id = ? WHERE id = ?", [newName, newType, group, budgetTypeId || null, id]);
   await saveDB();
 };
 
@@ -738,7 +772,6 @@ export const getSavingsGoals = (): SavingsGoal[] => {
       } catch (e) {
         if (rowObj.targetAccount) accounts = [String(rowObj.targetAccount)];
       }
-
       return {
         id: rowObj.id,
         name: rowObj.name,
@@ -751,6 +784,89 @@ export const getSavingsGoals = (): SavingsGoal[] => {
     console.error("Error fetching goals", e);
     return [];
   }
+};
+
+// --- Budgets ---
+
+export const getBudgetTypes = (): BudgetType[] => {
+  if (!db) return [];
+  try {
+    const res = db.exec("SELECT * FROM budget_types ORDER BY name ASC");
+    if (res.length === 0) return [];
+    return res[0].values.map((row: any[]) => ({
+      id: row[0],
+      name: row[1]
+    }));
+  } catch (e) { return []; }
+};
+
+export const createBudgetType = async (name: string) => {
+  if (!db) return;
+  db.run("INSERT INTO budget_types (id, name) VALUES (?, ?)", [`bt-${Date.now()}`, name]);
+  await saveDB();
+};
+
+export const updateBudgetType = async (id: string, name: string) => {
+  if (!db) return;
+  db.run("UPDATE budget_types SET name = ? WHERE id = ?", [name, id]);
+  await saveDB();
+};
+
+export const assignCategoriesToBudget = async (budgetTypeId: string, categoryIds: string[]) => {
+  if (!db) return;
+  // First, clear this budget type from all categories
+  db.run("UPDATE categories SET budget_type_id = NULL WHERE budget_type_id = ?", [budgetTypeId]);
+  
+  // Then, assign it to the new list
+  if (categoryIds.length > 0) {
+      const placeholders = categoryIds.map(() => '?').join(',');
+      db.run(`UPDATE categories SET budget_type_id = ? WHERE id IN (${placeholders})`, [budgetTypeId, ...categoryIds]);
+  }
+  await saveDB();
+};
+
+export const deleteBudgetType = async (id: string) => {
+  if (!db) return;
+  db.run("DELETE FROM budget_types WHERE id = ?", [id]);
+  await saveDB();
+};
+
+export const getMonthlyBudgets = (month: string): MonthlyBudget[] => {
+  if (!db) return [];
+  try {
+    const sql = `
+      SELECT mb.id, mb.month, mb.budget_type_id, mb.amount, bt.name
+      FROM monthly_budgets mb
+      JOIN budget_types bt ON mb.budget_type_id = bt.id
+      WHERE mb.month = ?
+    `;
+    const res = db.exec(sql, [month]);
+    if (res.length === 0) return [];
+    return res[0].values.map((row: any[]) => ({
+      id: row[0],
+      month: row[1],
+      budgetTypeId: row[2],
+      amount: row[3],
+      budgetTypeName: row[4]
+    }));
+  } catch (e) { return []; }
+};
+
+export const saveMonthlyBudget = async (budget: Omit<MonthlyBudget, 'budgetTypeName'>) => {
+  if (!db) return;
+  db.run("INSERT OR REPLACE INTO monthly_budgets (id, month, budget_type_id, amount) VALUES (?, ?, ?, ?)", [
+    budget.id || `mb-${Date.now()}`,
+    budget.month,
+    budget.budgetTypeId,
+    budget.amount
+  ]);
+  await saveDB();
+};
+
+export const deleteMonthlyBudget = async (id: string) => {
+  if (!db) return;
+  db.run("DELETE FROM monthly_budgets WHERE id = ?", [id]);
+  await saveDB();
 };
 
 // --- Utilities ---

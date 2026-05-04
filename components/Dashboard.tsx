@@ -1,17 +1,18 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { 
-  TrendingUp, TrendingDown, CreditCard, Wallet, Edit2, Trash2,
+  TrendingUp, TrendingDown, CreditCard, Wallet, Edit2, Trash2, Plus, X,
   ChevronDown, ChevronUp, BarChart3, Calendar, Filter, ChevronLeft, ChevronRight,
   Eye, EyeOff, Info, PiggyBank, Percent, ArrowRight
 } from 'lucide-react';
-import { Transaction, FinancialSummary, Category, TransactionType, Account, FiscalConfig } from '../types';
+import { Transaction, FinancialSummary, Category, TransactionType, Account, FiscalConfig, BudgetType, MonthlyBudget } from '../types';
 import { formatCurrency, aggregateData, getMonthYearLabel, getFiscalDateRange } from '../utils/helpers';
-import { getPrivacySetting, savePrivacySetting, getFiscalConfig } from '../services/db';
+import { getPrivacySetting, savePrivacySetting, getFiscalConfig, getBudgetTypes, getMonthlyBudgets, saveMonthlyBudget, deleteMonthlyBudget } from '../services/db';
 
 interface DashboardProps {
   transactions: Transaction[];
   categories: Category[];
   accounts?: Account[];
+  budgetTypes: BudgetType[];
   onEdit: (t: Transaction) => void;
   onDelete: (id: string) => void;
   onNavigateToAdmin: () => void;
@@ -60,6 +61,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   transactions, 
   categories, 
   accounts = [], 
+  budgetTypes,
   onEdit, 
   onDelete, 
   onNavigateToAdmin, 
@@ -68,14 +70,26 @@ export const Dashboard: React.FC<DashboardProps> = ({
   currency
 }) => {
   const [showCharts, setShowCharts] = useState(false);
+  const [showBudgetPlanner, setShowBudgetPlanner] = useState(false);
   const [privacyMode, setPrivacyMode] = useState(true); // Default to true (hidden)
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
   
   // Fiscal Config State
   const [fiscalConfig, setFiscalConfig] = useState<FiscalConfig>({ mode: 'calendar' });
+  const [monthlyBudgets, setMonthlyBudgets] = useState<MonthlyBudget[]>([]);
+  const [newBudamt, setNewBudamt] = useState<string>('');
+  const [newBudTypeId, setNewBudTypeId] = useState<string>('');
 
-  // Load fiscal config on mount
+  const refreshBudgets = (month: string) => {
+    if (month && month !== 'all') {
+      setMonthlyBudgets(getMonthlyBudgets(month));
+    } else {
+      setMonthlyBudgets([]);
+    }
+  };
+
+  // Load configuration on mount
   useEffect(() => {
     const config = getFiscalConfig();
     setFiscalConfig(config);
@@ -120,6 +134,11 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
   // Default filter to the first available period (usually current or latest with data)
   const [dateFilter, setDateFilter] = useState<string>('all');
+
+  // Load budgets when filter changes
+  useEffect(() => {
+    refreshBudgets(dateFilter);
+  }, [dateFilter]);
 
   // Initialize date filter once availableMonths is ready
   useEffect(() => {
@@ -224,6 +243,37 @@ export const Dashboard: React.FC<DashboardProps> = ({
     return (netSavings / periodSummary.totalIncome) * 100;
   }, [periodSummary, statsTransactions, savingsAccountNames]);
 
+  const budgetPerformance = useMemo(() => {
+    if (dateFilter === 'all') return [];
+
+    return monthlyBudgets.map(mb => {
+      const actual = statsTransactions
+        .filter(t => {
+           const cat = categories.find(c => c.name === t.category);
+           return cat && (cat as any).budgetTypeId === mb.budgetTypeId;
+        })
+        .reduce((sum, t) => sum + Math.abs(t.amount), 0);
+      
+      const remaining = mb.amount - actual;
+      const percent = mb.amount > 0 ? (actual / mb.amount) * 100 : 0;
+      
+      return {
+        ...mb,
+        actual,
+        remaining,
+        percent
+      };
+    });
+  }, [monthlyBudgets, statsTransactions, categories, dateFilter]);
+
+  const totalBudgetsValue = useMemo(() => {
+    return monthlyBudgets.reduce((sum, b) => sum + b.amount, 0);
+  }, [monthlyBudgets]);
+
+  const projectedBalance = useMemo(() => {
+    return periodSummary.totalIncome - totalBudgetsValue;
+  }, [periodSummary.totalIncome, totalBudgetsValue]);
+
   const detailedBreakdown = useMemo(() => {
     const groups: Record<string, { total: number, categories: Record<string, number> }> = {};
     statsTransactions.filter(t => t.type === TransactionType.EXPENSE).forEach(t => {
@@ -237,6 +287,30 @@ export const Dashboard: React.FC<DashboardProps> = ({
     });
     return Object.entries(groups).sort((a, b) => b[1].total - a[1].total);
   }, [statsTransactions, categories]);
+
+  const handleAddBudget = async () => {
+    if (!newBudTypeId || !newBudamt || dateFilter === 'all') return;
+    try {
+      await saveMonthlyBudget({
+        id: `mb-${Date.now()}`,
+        month: dateFilter,
+        budgetTypeId: newBudTypeId,
+        amount: parseFloat(newBudamt)
+      });
+      refreshBudgets(dateFilter);
+      setNewBudamt('');
+      setNewBudTypeId('');
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleDeleteBudget = async (id: string) => {
+    if (confirm("Delete this budget target?")) {
+      await deleteMonthlyBudget(id);
+      refreshBudgets(dateFilter);
+    }
+  };
 
   if (transactions.length === 0) {
     return (
@@ -271,6 +345,16 @@ export const Dashboard: React.FC<DashboardProps> = ({
          </div>
          
          <div className="flex items-center space-x-3">
+            {dateFilter !== 'all' && (
+              <button 
+                onClick={() => setShowBudgetPlanner(!showBudgetPlanner)}
+                className={`flex items-center px-4 py-2 text-sm font-bold rounded-lg border transition-all shadow-sm ${showBudgetPlanner ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-700 border-slate-200 hover:text-indigo-600 hover:border-indigo-100'}`}
+                title="Add Monthly Budget"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Add Budget
+              </button>
+            )}
             <button 
               onClick={togglePrivacy}
               className="p-2 text-slate-600 hover:text-blue-600 transition-colors bg-white border border-slate-200 rounded-lg shadow-sm"
@@ -308,13 +392,74 @@ export const Dashboard: React.FC<DashboardProps> = ({
          </div>
       </div>
 
+      {/* Budget Planner Area (Top Dropdown) */}
+      {dateFilter !== 'all' && showBudgetPlanner && (
+         <div className="bg-white p-6 rounded-xl shadow-sm border-2 border-indigo-100 animate-in slide-in-from-top-2 duration-300">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-slate-800 flex items-center">
+                <PiggyBank className="w-5 h-5 mr-2 text-indigo-500" />
+                Add Monthly Budget Group for {getMonthYearLabel(dateFilter)}
+              </h3>
+              <button 
+                onClick={() => setShowBudgetPlanner(false)}
+                className="p-1 hover:bg-slate-100 rounded-full transition-colors"
+              >
+                <X className="w-5 h-5 text-slate-400" />
+              </button>
+            </div>
+            
+            <div className="flex flex-col md:flex-row gap-4 p-4 bg-indigo-50/50 rounded-xl border border-indigo-100">
+              <div className="flex-1">
+                <label className="block text-[10px] font-bold text-indigo-600 uppercase mb-1 tracking-wider">Select Budget Group</label>
+                <select 
+                  className="w-full bg-white border border-indigo-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none text-slate-700"
+                  value={newBudTypeId}
+                  onChange={e => setNewBudTypeId(e.target.value)}
+                >
+                  <option value="">Choose a group...</option>
+                  {budgetTypes
+                    .filter(bt => !monthlyBudgets.some(mb => mb.budgetTypeId === bt.id))
+                    .map(bt => (
+                      <option key={bt.id} value={bt.id}>{bt.name}</option>
+                    ))
+                  }
+                </select>
+              </div>
+              <div className="flex-1">
+                <label className="block text-[10px] font-bold text-indigo-600 uppercase mb-1 tracking-wider">Target Amount ({currency})</label>
+                <div className="relative">
+                  <input 
+                    type="number"
+                    placeholder="0.00"
+                    className="w-full bg-white border border-indigo-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none text-slate-700 font-medium"
+                    value={newBudamt}
+                    onChange={e => setNewBudamt(e.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="flex items-end">
+                <button 
+                  onClick={() => {
+                    handleAddBudget();
+                    setShowBudgetPlanner(false);
+                  }}
+                  disabled={!newBudTypeId || !newBudamt}
+                  className="w-full md:w-auto px-8 py-2 bg-indigo-600 text-white rounded-lg text-sm font-bold hover:bg-indigo-700 disabled:opacity-50 transition-all shadow-md shadow-indigo-200"
+                >
+                  Save Budget Target
+                </button>
+              </div>
+            </div>
+         </div>
+      )}
+
       {/* Stats Row */}
       <div className={`grid grid-cols-1 sm:grid-cols-2 ${hasSavingsAccounts ? 'md:grid-cols-4' : 'md:grid-cols-3'} gap-6`}>
         <StatCard 
           title="Income" 
           amount={periodSummary.totalIncome} 
           icon={<TrendingUp className="w-6 h-6 text-emerald-600" />} 
-          colorClass="bg-emerald-100"
+          colorClass="bg-emerald-100" 
           privacyMode={privacyMode}
           decimalSeparator={decimalSeparator}
           currency={currency}
@@ -322,36 +467,64 @@ export const Dashboard: React.FC<DashboardProps> = ({
         <StatCard 
           title="Expenses" 
           amount={periodSummary.totalExpense} 
-          icon={<TrendingDown className="w-6 h-6 text-red-600" />} 
-          colorClass="bg-red-100"
+          icon={<TrendingDown className="w-6 h-6 text-rose-600" />} 
+          colorClass="bg-rose-100" 
           privacyMode={privacyMode}
           decimalSeparator={decimalSeparator}
           currency={currency}
         />
-        {hasSavingsAccounts && (
+        {hasSavingsAccounts ? (
           <StatCard 
             title="Savings Rate" 
             amount={savingsRate} 
-            icon={<Percent className="w-6 h-6 text-purple-600" />} 
-            colorClass="bg-purple-100"
-            privacyMode={privacyMode}
-            isPercentage
-            tooltip="Percentage of income added to Savings Accounts this period"
+            isPercentage 
+            icon={<Percent className="w-6 h-6 text-blue-600" />} 
+            colorClass="bg-blue-100" 
+            privacyMode={false} 
+            tooltip="Percentage of income saved into dedicated savings accounts"
             decimalSeparator={decimalSeparator}
             currency={currency}
           />
+        ) : (
+          dateFilter !== 'all' && (
+            <StatCard 
+              title="Projected Balance" 
+              amount={projectedBalance} 
+              icon={<BarChart3 className="w-6 h-6 text-blue-600" />} 
+              colorClass="bg-blue-100"
+              privacyMode={privacyMode}
+              tooltip="Projected balance after all monthly budgets are accounted for (Income - Total Budgets)"
+              decimalSeparator={decimalSeparator}
+              currency={currency}
+            />
+          )
         )}
         <StatCard 
           title="Available Balance" 
           amount={activeBalance} 
           icon={<Wallet className="w-6 h-6 text-blue-600" />} 
-          colorClass="bg-blue-100"
+          colorClass="bg-blue-100" 
           privacyMode={privacyMode}
           tooltip={`Includes only checking and regular accounts (Savings excluded)${!isCurrentView ? ' at end of selected period' : ''}`}
           decimalSeparator={decimalSeparator}
           currency={currency}
         />
       </div>
+
+      {hasSavingsAccounts && dateFilter !== 'all' && (
+          <div className="grid grid-cols-1 gap-6">
+              <StatCard 
+                title="Projected Balance after Budgets" 
+                amount={projectedBalance} 
+                icon={<BarChart3 className="w-6 h-6 text-indigo-600" />} 
+                colorClass="bg-indigo-100"
+                privacyMode={privacyMode}
+                tooltip="Projected balance after all monthly budgets are accounted for (Income - Total Budgets)"
+                decimalSeparator={decimalSeparator}
+                currency={currency}
+              />
+          </div>
+      )}
 
       {/* Accounts Overview */}
       <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
@@ -398,6 +571,73 @@ export const Dashboard: React.FC<DashboardProps> = ({
       <div>
         {showCharts && (
           <div className="space-y-6 animate-fade-in">
+            {/* Monthly Budget Performance */}
+            {dateFilter !== 'all' && monthlyBudgets.length > 0 && (
+              <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
+                <h3 className="text-lg font-semibold text-slate-800 mb-6 flex items-center">
+                  <PiggyBank className="w-5 h-5 mr-2 text-indigo-500" />
+                  Monthly Budget Performance
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {budgetPerformance.map(bp => (
+                    <div key={bp.id} className="p-5 border border-slate-100 rounded-xl bg-slate-50 relative overflow-hidden group">
+                      <div className="flex justify-between items-start mb-3">
+                        <div>
+                          <h4 className="font-bold text-slate-800">{bp.budgetTypeName}</h4>
+                          <p className="text-xs text-slate-500 uppercase font-bold tracking-wider">
+                            {formatCurrency(bp.amount, decimalSeparator, currency)} target
+                          </p>
+                        </div>
+                        <button 
+                          onClick={() => handleDeleteBudget(bp.id)}
+                          className="p-1.5 text-slate-400 hover:text-red-600 transition-colors opacity-0 group-hover:opacity-100"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+
+                      <div className="flex justify-between items-baseline mb-2">
+                        <span className={`text-xl font-bold ${bp.remaining >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                          {privacyMode ? '••••••' : formatCurrency(bp.remaining, decimalSeparator, currency)}
+                        </span>
+                        <span className="text-xs font-semibold text-slate-500">
+                           {bp.percent.toFixed(0)}% spent
+                        </span>
+                      </div>
+
+                      <div className="w-full bg-slate-200 rounded-full h-2.5 overflow-hidden">
+                        <div 
+                          className={`h-full rounded-full transition-all duration-500 ${bp.percent > 100 ? 'bg-red-500' : bp.percent > 85 ? 'bg-amber-500' : 'bg-emerald-500'}`}
+                          style={{ width: `${Math.min(100, bp.percent)}%` }}
+                        />
+                      </div>
+                      
+                      <div className="mt-4 pt-4 border-t border-slate-200">
+                         <p className="text-xs font-bold text-slate-400 mb-2 uppercase">Expenses by mapping</p>
+                         <div className="space-y-1.5">
+                            {categories
+                              .filter(c => (c as any).budgetTypeId === bp.budgetTypeId)
+                              .map(c => {
+                                const catActual = statsTransactions
+                                  .filter(t => t.category === c.name)
+                                  .reduce((sum, t) => sum + Math.abs(t.amount), 0);
+                                if (catActual === 0) return null;
+                                return (
+                                  <div key={c.id} className="flex justify-between text-xs">
+                                     <span className="text-slate-600">{c.name}</span>
+                                     <span className="font-medium text-slate-800">{formatCurrency(catActual, decimalSeparator, currency)}</span>
+                                  </div>
+                                );
+                              })
+                            }
+                         </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            
             <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
               <h3 className="text-lg font-semibold text-slate-800 mb-6">Expense Breakdown by Category</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">

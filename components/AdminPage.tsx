@@ -3,8 +3,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Download, Trash2, Settings, Tag, CreditCard, Edit2, Save, X, UploadCloud, AlertTriangle, Upload, Wand2, Key, PiggyBank, Plus, CalendarRange, Lock, Unlock, Hash, Calendar, Bookmark } from 'lucide-react';
 import { SqlConsole } from './SqlConsole';
 import { FileUpload } from './FileUpload';
-import { getAccounts, getCategories, updateAccount, updateCategory, createCategory, deleteCategory, deleteAccount, getTransactionCount, generateDummyData, getApiKey, saveApiKey, createAccount, getFiscalConfig, saveFiscalConfig, isDatabaseEncrypted, setDatabasePassword, removeDatabasePassword, saveImportConfig, getImportTemplates, deleteImportTemplate } from '../services/db';
-import { Account, Category, Transaction, FiscalConfig, ImportTemplate } from '../types';
+import { getAccounts, getCategories, updateAccount, updateCategory, createCategory, deleteCategory, deleteAccount, getTransactionCount, generateDummyData, getApiKey, saveApiKey, createAccount, getFiscalConfig, saveFiscalConfig, isDatabaseEncrypted, setDatabasePassword, removeDatabasePassword, saveImportConfig, getImportTemplates, deleteImportTemplate, getBudgetTypes, createBudgetType, deleteBudgetType, updateBudgetType, assignCategoriesToBudget } from '../services/db';
+import { Account, Category, Transaction, FiscalConfig, ImportTemplate, BudgetType } from '../types';
 
 interface AdminPageProps {
   onBackup: () => void;
@@ -35,6 +35,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
 }) => {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [budgetTypes, setBudgetTypes] = useState<BudgetType[]>([]);
   const [templates, setTemplates] = useState<ImportTemplate[]>([]);
   const [showImport, setShowImport] = useState(false);
   const [dbCount, setDbCount] = useState(0);
@@ -52,6 +53,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
   const refreshData = async () => {
     setAccounts(getAccounts());
     setCategories(getCategories());
+    setBudgetTypes(getBudgetTypes());
     setTemplates(getImportTemplates());
     setDbCount(getTransactionCount());
     setFiscalConfig(getFiscalConfig());
@@ -144,6 +146,27 @@ export const AdminPage: React.FC<AdminPageProps> = ({
     } catch (e) {
         notify("Failed to save currency", "error");
     }
+  };
+
+  const handleCreateBudgetType = async (name: string) => {
+      if (!name.trim()) return;
+      try {
+          await createBudgetType(name.trim());
+          refreshData();
+          notify("Budget type created", "success");
+      } catch (e: any) {
+          notify("Failed to create budget type", "error");
+      }
+  };
+
+  const handleDeleteBudgetType = async (id: string) => {
+      try {
+          await deleteBudgetType(id);
+          refreshData();
+          notify("Budget type deleted", "info");
+      } catch (e: any) {
+          notify("Failed to delete budget type", "error");
+      }
   };
 
   const handleCreateAccount = async (name: string, isSavings: boolean) => {
@@ -606,8 +629,9 @@ export const AdminPage: React.FC<AdminPageProps> = ({
           </div>
           <CategoryList 
              categories={categories} 
-             onCreate={handleCreateCategory}
-             onUpdate={async (id, neo, type, group) => { await updateCategory(id, neo, type, group); refreshData(); }}
+             budgetTypes={budgetTypes}
+             onCreate={async (name, type, group, bId) => { await createCategory(name, type, group, bId); refreshData(); }}
+             onUpdate={async (id, neo, type, group, bId) => { await updateCategory(id, neo, type, group, bId); refreshData(); }}
              onDelete={async (id) => { 
                try {
                    await deleteCategory(id); 
@@ -619,18 +643,196 @@ export const AdminPage: React.FC<AdminPageProps> = ({
              }}
           />
         </div>
+
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 flex flex-col">
+          <div className="flex items-center space-x-2 mb-4">
+            <PiggyBank className="w-5 h-5 text-purple-500" />
+            <h3 className="font-bold text-slate-800">Budget Types</h3>
+          </div>
+          <BudgetTypeList 
+            budgetTypes={budgetTypes}
+            categories={categories}
+            onCreate={handleCreateBudgetType}
+            onUpdate={async (id, name) => { await updateBudgetType(id, name); refreshData(); }}
+            onAssign={async (id, catIds) => { await assignCategoriesToBudget(id, catIds); refreshData(); }}
+            onDelete={handleDeleteBudgetType}
+          />
+        </div>
       </div>
 
       <SqlConsole />
     </div>
   );
 };
+const BudgetTypeList: React.FC<{
+  budgetTypes: BudgetType[],
+  categories: Category[],
+  onCreate: (name: string) => Promise<void>,
+  onUpdate: (id: string, name: string) => Promise<void>,
+  onAssign: (id: string, catIds: string[]) => Promise<void>,
+  onDelete: (id: string) => Promise<void>
+}> = ({ budgetTypes, categories, onCreate, onUpdate, onAssign, onDelete }) => {
+  const [newBudgetType, setNewBudgetType] = useState('');
+  const [editingBtId, setEditingBtId] = useState<string | null>(null);
+  const [editName, setEditName] = useState('');
+  const [selectedCats, setSelectedCats] = useState<string[]>([]);
+
+  const handleCreate = async () => {
+    if (newBudgetType.trim()) {
+      await onCreate(newBudgetType.trim());
+      setNewBudgetType('');
+    }
+  };
+
+  const handleStartEdit = (bt: BudgetType) => {
+      setEditingBtId(bt.id);
+      setEditName(bt.name);
+      const associated = categories
+        .filter(c => (c as any).budgetTypeId === bt.id)
+        .map(c => c.id);
+      setSelectedCats(associated);
+  };
+
+  const handleSaveEdit = async () => {
+      if (editingBtId) {
+          await onUpdate(editingBtId, editName);
+          await onAssign(editingBtId, selectedCats);
+          setEditingBtId(null);
+      }
+  };
+
+  const toggleCategory = (catId: string) => {
+      setSelectedCats(prev => 
+        prev.includes(catId) ? prev.filter(id => id !== catId) : [...prev, catId]
+      );
+  };
+
+  return (
+    <div className="flex-1 flex flex-col min-h-0">
+      <div className="mb-4 bg-slate-50 p-3 rounded-lg border border-slate-100">
+        <div className="flex items-center space-x-2">
+          <input 
+            className="flex-1 px-3 py-2 border rounded-lg text-sm bg-white text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+            value={newBudgetType}
+            onChange={e => setNewBudgetType(e.target.value)}
+            placeholder="New budget type (e.g. Housing, Food)..."
+          />
+          <button 
+            onClick={handleCreate}
+            disabled={!newBudgetType.trim()}
+            className="p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Plus className="w-5 h-5" />
+          </button>
+        </div>
+      </div>
+      <div className="flex-1 border border-slate-100 rounded-lg overflow-hidden bg-slate-50 max-h-96 overflow-y-auto">
+        <div className="divide-y divide-slate-100">
+          {budgetTypes.map(bt => (
+            <div key={bt.id} className="bg-white">
+              <div className="px-4 py-3 flex items-center justify-between hover:bg-slate-50 group cursor-pointer" onClick={() => handleStartEdit(bt)}>
+                <div className="flex items-center space-x-3">
+                   <div className="p-1.5 bg-purple-50 rounded text-purple-600">
+                      <PiggyBank className="w-4 h-4" />
+                   </div>
+                   <div>
+                      <span className="text-sm font-semibold text-slate-700">{bt.name}</span>
+                      <p className="text-[10px] text-slate-400 uppercase font-bold">
+                         {categories.filter(c => (c as any).budgetTypeId === bt.id).length} categories assigned
+                      </p>
+                   </div>
+                </div>
+                <div className="flex items-center space-x-1">
+                    <button 
+                        onClick={(e) => { e.stopPropagation(); onDelete(bt.id); }}
+                        className="p-1.5 text-slate-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                        <Trash2 className="w-4 h-4" />
+                    </button>
+                </div>
+              </div>
+
+              {editingBtId === bt.id && (
+                  <div className="px-4 py-4 bg-slate-50 border-y border-slate-200 animate-in slide-in-from-top-1 duration-200">
+                      <div className="mb-4">
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Name</label>
+                          <div className="flex space-x-2">
+                              <input 
+                                  className="flex-1 px-3 py-1.5 border rounded-lg text-sm bg-white text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none"
+                                  value={editName}
+                                  onChange={e => setEditName(e.target.value)}
+                              />
+                          </div>
+                      </div>
+
+                      <div className="mb-4">
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase mb-2">Category Mappings (Expenses)</label>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-2">
+                              {categories
+                                .filter(c => c.type === 'Expense')
+                                .map(cat => {
+                                    const isSelected = selectedCats.includes(cat.id);
+                                    const isAssignedElsewhere = (cat as any).budgetTypeId && (cat as any).budgetTypeId !== bt.id;
+                                    const otherBudgetName = isAssignedElsewhere && budgetTypes.find(b => b.id === (cat as any).budgetTypeId)?.name;
+
+                                    return (
+                                        <label 
+                                            key={cat.id} 
+                                            className={`flex items-center p-2 rounded-lg border text-xs cursor-pointer transition-colors ${isSelected ? 'bg-blue-50 border-blue-200 text-blue-700' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}
+                                        >
+                                            <input 
+                                                type="checkbox"
+                                                className="mr-2 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                                checked={isSelected}
+                                                onChange={() => toggleCategory(cat.id)}
+                                            />
+                                            <div className="flex-1 truncate">
+                                                <span className="font-medium">{cat.name}</span>
+                                                {isAssignedElsewhere && (
+                                                    <span className="block text-[9px] text-amber-600 font-bold">Moves from: {otherBudgetName}</span>
+                                                )}
+                                            </div>
+                                        </label>
+                                    );
+                                })
+                              }
+                          </div>
+                      </div>
+
+                      <div className="flex justify-end space-x-2 pt-2 border-t border-slate-200">
+                          <button 
+                            onClick={() => setEditingBtId(null)}
+                            className="px-3 py-1.5 text-xs font-bold text-slate-500 hover:text-slate-700"
+                          >
+                            Cancel
+                          </button>
+                          <button 
+                            onClick={handleSaveEdit}
+                            className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-bold hover:bg-blue-700 shadow-sm"
+                          >
+                            Save Changes
+                          </button>
+                      </div>
+                  </div>
+              )}
+            </div>
+          ))}
+          {budgetTypes.length === 0 && (
+            <div className="p-8 text-center text-slate-400 text-sm italic">
+                No budget groups defined. Create one above.
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
 
 const AccountList: React.FC<{ 
-    accounts: Account[], 
-    onCreate: (name: string, isSavings: boolean) => Promise<void>,
-    onUpdate: (id: string, neo: string, isSavings: boolean) => Promise<void>,
-    onDelete: (id: string) => Promise<void>
+  accounts: Account[], 
+  onCreate: (name: string, isSavings: boolean) => Promise<void>,
+  onUpdate: (id: string, name: string, isSavings: boolean) => Promise<void>,
+  onDelete: (id: string) => Promise<void>
 }> = ({ accounts, onCreate, onUpdate, onDelete }) => {
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
@@ -738,10 +940,11 @@ const AccountList: React.FC<{
 
 const CategoryList: React.FC<{ 
   categories: Category[], 
-  onCreate: (name: string, type: string, group: string) => Promise<void>,
-  onUpdate: (id: string, neo: string, type: string, group: string) => Promise<void>,
+  budgetTypes: BudgetType[],
+  onCreate: (name: string, type: string, group: string, budgetTypeId?: string) => Promise<void>,
+  onUpdate: (id: string, neo: string, type: string, group: string, budgetTypeId?: string) => Promise<void>,
   onDelete: (id: string) => Promise<void>
-}> = ({ categories, onCreate, onUpdate, onDelete }) => {
+}> = ({ categories, budgetTypes, onCreate, onUpdate, onDelete }) => {
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [formData, setFormData] = useState({ name: '', type: 'Expense', group: 'General' });
   
@@ -751,12 +954,16 @@ const CategoryList: React.FC<{
 
   const handleStartEdit = (cat: Category) => {
     setEditingItemId(cat.id);
-    setFormData({ name: cat.name, type: cat.type, group: cat.group });
+    setFormData({ 
+      name: cat.name, 
+      type: cat.type, 
+      group: cat.group
+    });
   };
 
   const handleSave = async () => {
     if (editingItemId && formData.name) {
-      await onUpdate(editingItemId, formData.name, formData.type, formData.group);
+      await onUpdate(editingItemId, formData.name, formData.type, formData.group, (categories.find(c => c.id === editingItemId) as any)?.budgetTypeId);
     }
     setEditingItemId(null);
   };
@@ -809,6 +1016,12 @@ const CategoryList: React.FC<{
                 <span className="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded">
                     {cat.group}
                 </span>
+                {(cat as any).budgetTypeId && (
+                  <span className="text-[10px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded border border-blue-100 flex items-center">
+                    <PiggyBank className="w-2.5 h-2.5 mr-1" />
+                    {budgetTypes.find(bt => bt.id === (cat as any).budgetTypeId)?.name || 'Budget'}
+                  </span>
+                )}
                 </div>
             </div>
             <div className="flex items-center space-x-2 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -831,37 +1044,41 @@ const CategoryList: React.FC<{
   return (
      <div className="flex-1 flex flex-col min-h-0">
         <div className="mb-4 bg-slate-50 p-3 rounded-lg border border-slate-100">
-           <div className="flex items-center space-x-2">
-             <input 
-                className="flex-1 px-3 py-2 border rounded-lg text-sm bg-white text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                value={newName}
-                onChange={e => setNewName(e.target.value)}
-                placeholder="New category..."
-             />
-             <select 
-                className="w-24 text-xs border rounded-lg px-2 py-2 bg-white text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                value={newType}
-                onChange={e => setNewType(e.target.value)}
-             >
-                <option value="Expense">Expense</option>
-                <option value="Income">Income</option>
-                <option value="Balance">Balance</option>
-             </select>
-             <select 
-                className="w-24 text-xs border rounded-lg px-2 py-2 bg-white text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                value={newGroup}
-                onChange={e => setNewGroup(e.target.value)}
-             >
-                <option value="General">General</option>
-                <option value="Recurring">Recur.</option>
-             </select>
-             <button 
-                onClick={handleCreate}
-                disabled={!newName.trim()}
-                className="p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-             >
-                <Plus className="w-5 h-5" />
-             </button>
+           <div className="flex flex-col gap-2">
+             <div className="flex items-center space-x-2">
+              <input 
+                  className="flex-1 px-3 py-2 border rounded-lg text-sm bg-white text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  value={newName}
+                  onChange={e => setNewName(e.target.value)}
+                  placeholder="New category..."
+                />
+                <button 
+                  onClick={handleCreate}
+                  disabled={!newName.trim()}
+                  className="p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Plus className="w-5 h-5" />
+                </button>
+             </div>
+             <div className="flex items-center space-x-2">
+              <select 
+                  className="flex-1 text-xs border rounded-lg px-2 py-2 bg-white text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  value={newType}
+                  onChange={e => setNewType(e.target.value)}
+              >
+                  <option value="Expense">Expense</option>
+                  <option value="Income">Income</option>
+                  <option value="Balance">Balance</option>
+              </select>
+              <select 
+                  className="flex-1 text-xs border rounded-lg px-2 py-2 bg-white text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  value={newGroup}
+                  onChange={e => setNewGroup(e.target.value)}
+              >
+                  <option value="General">General</option>
+                  <option value="Recurring">Recur.</option>
+              </select>
+             </div>
            </div>
         </div>
 

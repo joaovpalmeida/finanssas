@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Search, Filter, X, Calendar, Tag, CreditCard, ArrowDown, ArrowUp, Loader2, Edit2, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
-import { Transaction, Category, Account, SearchFilters, TransactionType } from '../types';
+import { Search, Filter, X, Calendar, Tag, CreditCard, ArrowDown, ArrowUp, Loader2, Edit2, Trash2, ChevronLeft, ChevronRight, PiggyBank } from 'lucide-react';
+import { Transaction, Category, Account, SearchFilters, TransactionType, BudgetType } from '../types';
 import { searchTransactions } from '../services/db';
 import { formatCurrency, formatDate } from '../utils/helpers';
 
 interface TransactionSearchProps {
   categories: Category[];
   accounts: Account[];
+  budgetTypes: BudgetType[];
   onEdit: (t: Transaction) => void;
   onDelete: (id: string) => void;
   decimalSeparator: '.' | ',';
@@ -17,6 +18,7 @@ interface TransactionSearchProps {
 export const TransactionSearch: React.FC<TransactionSearchProps> = ({ 
   categories, 
   accounts, 
+  budgetTypes,
   onEdit, 
   onDelete, 
   decimalSeparator,
@@ -35,6 +37,7 @@ export const TransactionSearch: React.FC<TransactionSearchProps> = ({
     category: '',
     account: '',
     type: '',
+    budgetTypeId: '',
     startDate: '',
     endDate: '',
     minAmount: '',
@@ -63,6 +66,7 @@ export const TransactionSearch: React.FC<TransactionSearchProps> = ({
         category: '',
         account: '',
         type: '',
+        budgetTypeId: '',
         startDate: '',
         endDate: '',
         minAmount: '',
@@ -71,7 +75,7 @@ export const TransactionSearch: React.FC<TransactionSearchProps> = ({
     setCurrentPage(1);
     // Trigger search after state update would normally require useEffect, 
     // but here we can just pass empty filters directly to search
-    const emptyFilters = { keyword: '', category: '', account: '', type: '', startDate: '', endDate: '', minAmount: '', maxAmount: '' };
+    const emptyFilters = { keyword: '', category: '', account: '', type: '', budgetTypeId: '', startDate: '', endDate: '', minAmount: '', maxAmount: '' };
     setResults(searchTransactions(emptyFilters));
   };
 
@@ -191,6 +195,24 @@ export const TransactionSearch: React.FC<TransactionSearchProps> = ({
                 <option value="Transfer">Transfer</option>
                 <option value="Balance">Balance</option>
              </select>
+           </div>
+
+           {/* Budget Type */}
+           <div>
+             <label className="block text-xs font-semibold text-slate-500 mb-1">Budget Type</label>
+             <div className="relative">
+                <PiggyBank className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
+                <select 
+                  value={filters.budgetTypeId || ''}
+                  onChange={e => setFilters({...filters, budgetTypeId: e.target.value})}
+                  className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-base sm:text-sm appearance-none bg-white text-slate-800"
+                >
+                  <option value="">All Budgets</option>
+                  {budgetTypes.map(bt => (
+                    <option key={bt.id} value={bt.id}>{bt.name}</option>
+                  ))}
+                </select>
+             </div>
            </div>
            
            {/* Actions */}

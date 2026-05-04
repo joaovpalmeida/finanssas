@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect, useMemo, Suspense, useCallback } from 'react';
 import { Wallet, Loader2, Plus, Settings, Target, Search, Home, Menu, X, BarChart3, Sparkles, HelpCircle, CheckCircle, AlertCircle, Info } from 'lucide-react';
-import { Transaction, Account, Category } from './types';
-import { initDB, insertTransactions, getAllTransactions, resetDB, exportDatabaseBlob, deleteTransaction, getAccounts, getCategories, importDatabase, unlockDB, DBStatus, getImportConfig } from './services/db';
+import { Transaction, Account, Category, BudgetType } from './types';
+import { initDB, insertTransactions, getAllTransactions, resetDB, exportDatabaseBlob, deleteTransaction, getAccounts, getCategories, importDatabase, unlockDB, DBStatus, getImportConfig, getBudgetTypes } from './services/db';
 import { calculateRunningBalances, aggregateData } from './utils/helpers';
 import { PasswordPrompt } from './components/PasswordPrompt';
 
@@ -35,6 +35,7 @@ function App() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [budgetTypes, setBudgetTypes] = useState<BudgetType[]>([]);
   
   const [isLoading, setIsLoading] = useState(false);
   const [dbStatus, setDbStatus] = useState<DBStatus>('LOADING');
@@ -81,6 +82,7 @@ function App() {
     // Also refresh metadata
     setAccounts(getAccounts());
     setCategories(getCategories());
+    setBudgetTypes(getBudgetTypes());
     
     // Load config
     const config = getImportConfig();
@@ -366,6 +368,7 @@ function App() {
                 transactions={transactions} 
                 categories={categories}
                 accounts={accounts}
+                budgetTypes={budgetTypes}
                 onEdit={handleEditClick}
                 onDelete={(id) => { 
                     if(confirm("Are you sure?")) handleDeleteTransaction(id); 
@@ -380,6 +383,7 @@ function App() {
               <TransactionSearch 
                 categories={categories} 
                 accounts={accounts} 
+                budgetTypes={budgetTypes}
                 onEdit={handleEditClick}
                 onDelete={handleDeleteTransaction}
                 decimalSeparator={decimalSeparator}
