@@ -345,7 +345,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
          </div>
          
          <div className="flex items-center space-x-3">
-            {dateFilter !== 'all' && (
+            {dateFilter !== 'all' && budgetTypes.length > 0 && (
               <button 
                 onClick={() => setShowBudgetPlanner(!showBudgetPlanner)}
                 className={`flex items-center px-4 py-2 text-sm font-bold rounded-lg border transition-all shadow-sm ${showBudgetPlanner ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-700 border-slate-200 hover:text-indigo-600 hover:border-indigo-100'}`}
