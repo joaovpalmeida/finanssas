@@ -1,6 +1,6 @@
 {
   "name": "Finanssas",
-  "description": "A comprehensive personal finance manager that supports Excel imports, manual tracking, and AI-powered insights, all running locally in your browser.",
+  "description": "A comprehensive personal finance manager with Excel imports, manual tracking, monthly budgeting, and AI-powered insights, all running locally and privately in your browser.",
   "requestFramePermissions": [],
   "majorCapabilities": []
 }

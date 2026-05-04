@@ -10,6 +10,7 @@ Finan$$as is a local-first, privacy-focused personal finance application that tu
 *   **Flexible Tracking:** Record Income, Expenses, Transfers, and **Balance Adjustments** (for setting initial balances or correcting drift).
 *   **Interactive Dashboard:** Visualize cash flow, detailed expense breakdowns, and net worth across all accounts.
 *   **Mobile Optimized:** Fully responsive design ensures a great experience on phones and tablets.
+*   **Budget Planning:** Set monthly targets by group and see projected balances based on planned spending.
 *   **AI Insights:** Analyze spending habits and chat with your data using Google Gemini.
 *   **Savings Goals:** Track progress towards financial targets with multi-account support.
 *   **SQL Console:** Run raw SQL queries directly against your financial data.

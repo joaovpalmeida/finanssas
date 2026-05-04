@@ -95,7 +95,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted }) => {
       {/* Features Grid */}
       <div>
         <h3 className="text-2xl font-bold text-slate-800 text-center mb-10">Everything you need to manage wealth</h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
           <div className="p-6 bg-white rounded-xl shadow-sm border border-slate-100 hover:shadow-md transition-shadow">
             <div className="w-10 h-10 bg-indigo-100 rounded-lg flex items-center justify-center text-indigo-600 mb-4">
               <FileSpreadsheet className="w-5 h-5" />
@@ -123,6 +123,16 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted }) => {
             <h4 className="text-lg font-bold text-slate-800 mb-2">Mobile Dashboard</h4>
             <p className="text-slate-600 text-sm">
               Visualize cash flow, track savings goals, and monitor account balances from any device.
+            </p>
+          </div>
+
+          <div className="p-6 bg-white rounded-xl shadow-sm border border-slate-100 hover:shadow-md transition-shadow">
+            <div className="w-10 h-10 bg-emerald-100 rounded-lg flex items-center justify-center text-emerald-600 mb-4">
+              <LayoutDashboard className="w-5 h-5" />
+            </div>
+            <h4 className="text-lg font-bold text-slate-800 mb-2">Budget Planning</h4>
+            <p className="text-slate-600 text-sm">
+              Set monthly targets by group and see projected balances. Stay on track with real-time budget tracking.
             </p>
           </div>
         </div>

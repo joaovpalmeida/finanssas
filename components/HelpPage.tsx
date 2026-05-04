@@ -120,6 +120,16 @@ export const HelpPage: React.FC = () => {
           </ul>
         </HelpSection>
 
+        {/* Budgeting */}
+        <HelpSection title="Monthly Budgeting" icon={LayoutDashboard}>
+          <p>Plan your spending with monthly budget targets.</p>
+          <ul className="list-disc pl-5 space-y-1 mt-2">
+            <li><strong>Add Budgets:</strong> Click "Add Budget" on the Dashboard (only visible when a specific month is selected).</li>
+            <li><strong>Projected Balance:</strong> The app calculates your "Projected Balance" by taking your total income and subtracting all budget targets for that month.</li>
+            <li><strong>Real-time Tracking:</strong> Compare your actual spending against your budget targets in the breakdown charts.</li>
+          </ul>
+        </HelpSection>
+
         {/* Admin */}
         <HelpSection title="Configuration" icon={Settings}>
           <p>Customize the app to fit your lifestyle in the Admin tab.</p>
