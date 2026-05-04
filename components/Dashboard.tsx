@@ -80,6 +80,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const [monthlyBudgets, setMonthlyBudgets] = useState<MonthlyBudget[]>([]);
   const [newBudamt, setNewBudamt] = useState<string>('');
   const [newBudTypeId, setNewBudTypeId] = useState<string>('');
+  const [editingBudgetId, setEditingBudgetId] = useState<string | null>(null);
+  const [editingBudgetAmount, setEditingBudgetAmount] = useState<string>('');
 
   const refreshBudgets = (month: string) => {
     if (month && month !== 'all') {
@@ -300,6 +302,22 @@ export const Dashboard: React.FC<DashboardProps> = ({
       refreshBudgets(dateFilter);
       setNewBudamt('');
       setNewBudTypeId('');
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleUpdateBudget = async (mb: MonthlyBudget, newAmount: string) => {
+    const amount = parseFloat(newAmount);
+    if (isNaN(amount)) return;
+    
+    try {
+      await saveMonthlyBudget({
+        ...mb,
+        amount
+      });
+      setEditingBudgetId(null);
+      refreshBudgets(dateFilter);
     } catch (e) {
       console.error(e);
     }
@@ -582,11 +600,47 @@ export const Dashboard: React.FC<DashboardProps> = ({
                   {budgetPerformance.map(bp => (
                     <div key={bp.id} className="p-5 border border-slate-100 rounded-xl bg-slate-50 relative overflow-hidden group">
                       <div className="flex justify-between items-start mb-3">
-                        <div>
+                        <div className="flex-1">
                           <h4 className="font-bold text-slate-800">{bp.budgetTypeName}</h4>
-                          <p className="text-xs text-slate-500 uppercase font-bold tracking-wider">
-                            {formatCurrency(bp.amount, decimalSeparator, currency)} target
-                          </p>
+                          {editingBudgetId === bp.id ? (
+                            <div className="flex items-center mt-1 space-x-2">
+                              <input 
+                                type="number"
+                                step="0.01"
+                                className="w-24 px-2 py-1 text-xs border border-indigo-200 rounded outline-none focus:ring-1 focus:ring-indigo-500"
+                                value={editingBudgetAmount}
+                                onChange={e => setEditingBudgetAmount(e.target.value)}
+                                autoFocus
+                              />
+                              <button 
+                                onClick={() => handleUpdateBudget(bp, editingBudgetAmount)}
+                                className="p-1 text-emerald-600 hover:bg-emerald-50 rounded"
+                              >
+                                <Plus className="w-3.5 h-3.5" />
+                              </button>
+                              <button 
+                                onClick={() => setEditingBudgetId(null)}
+                                className="p-1 text-slate-400 hover:bg-slate-100 rounded"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="flex items-center space-x-2 group/edit">
+                              <p className="text-xs text-slate-500 uppercase font-bold tracking-wider">
+                                {formatCurrency(bp.amount, decimalSeparator, currency)} target
+                              </p>
+                              <button 
+                                onClick={() => {
+                                  setEditingBudgetId(bp.id);
+                                  setEditingBudgetAmount(bp.amount.toString());
+                                }}
+                                className="p-1 text-slate-400 hover:text-indigo-600 opacity-0 group-hover/edit:opacity-100 transition-opacity"
+                              >
+                                <Edit2 className="w-3 h-3" />
+                              </button>
+                            </div>
+                          )}
                         </div>
                         <button 
                           onClick={() => handleDeleteBudget(bp.id)}

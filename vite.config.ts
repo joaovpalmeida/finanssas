@@ -13,7 +13,8 @@ export default defineConfig(({ mode }) => {
       plugins: [react()],
       define: {
         'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
-        'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY)
+        'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
+        '__BUILD_DATE__': JSON.stringify(new Date().toISOString().replace('T', ' ').substring(0, 19) + ' UTC')
       },
       resolve: {
         alias: {

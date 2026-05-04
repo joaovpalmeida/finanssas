@@ -6,6 +6,9 @@ import { initDB, insertTransactions, getAllTransactions, resetDB, exportDatabase
 import { calculateRunningBalances, aggregateData } from './utils/helpers';
 import { PasswordPrompt } from './components/PasswordPrompt';
 
+// Global declaration for build date injected by Vite
+declare const __BUILD_DATE__: string;
+
 // Lazy Load Components
 const Dashboard = React.lazy(() => import('./components/Dashboard').then(module => ({ default: module.Dashboard })));
 const Insights = React.lazy(() => import('./components/Insights').then(module => ({ default: module.Insights })));
@@ -420,6 +423,20 @@ function App() {
           </div>
         </Suspense>
       </main>
+
+      {/* Footer */}
+      <footer className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 border-t border-slate-200">
+        <div className="flex flex-col md:flex-row justify-between items-center text-slate-500 text-sm gap-4">
+          <div className="flex items-center space-x-1">
+            <span>© {new Date().getFullYear()} Finan$$as.</span>
+            <span>All rights reserved.</span>
+          </div>
+          <div className="flex items-center space-x-1 text-slate-400 text-xs">
+            <span>Build Date:</span>
+            <span className="font-mono">{typeof __BUILD_DATE__ !== 'undefined' ? __BUILD_DATE__ : 'Development'}</span>
+          </div>
+        </div>
+      </footer>
 
       <Suspense fallback={null}>
         {isModalOpen && (
