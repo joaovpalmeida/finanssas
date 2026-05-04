@@ -50,6 +50,7 @@ function App() {
   // App Settings
   const [decimalSeparator, setDecimalSeparator] = useState<'.' | ','>('.');
   const [dateFormat, setDateFormat] = useState<string>('YYYY-MM-DD');
+  const [currency, setCurrency] = useState<string>('EUR');
 
   const notify = useCallback((message: string, type: 'success' | 'error' | 'info' = 'info') => {
     const id = Date.now();
@@ -88,6 +89,9 @@ function App() {
     }
     if (config.dateFormat) {
         setDateFormat(config.dateFormat);
+    }
+    if (config.currency) {
+        setCurrency(config.currency);
     }
   };
 
@@ -369,6 +373,7 @@ function App() {
                 onNavigateToAdmin={() => setActiveTab('admin')}
                 decimalSeparator={decimalSeparator}
                 dateFormat={dateFormat}
+                currency={currency}
               />
             )}
             {activeTab === 'search' && (
@@ -379,14 +384,16 @@ function App() {
                 onDelete={handleDeleteTransaction}
                 decimalSeparator={decimalSeparator}
                 dateFormat={dateFormat}
+                currency={currency}
               />
             )}
-            {activeTab === 'insights' && <Insights transactions={transactions} />}
+            {activeTab === 'insights' && <Insights transactions={transactions} currency={currency} />}
             {activeTab === 'savings' && (
               <SavingsGoals 
                 accountBalances={accountBalances} 
                 decimalSeparator={decimalSeparator}
                 dateFormat={dateFormat}
+                currency={currency}
                 notify={notify}
               />
             )}
@@ -401,6 +408,7 @@ function App() {
                 uploadError={error}
                 decimalSeparator={decimalSeparator}
                 dateFormat={dateFormat}
+                currency={currency}
                 notify={notify}
               />
             )}
@@ -422,6 +430,7 @@ function App() {
             accounts={accounts}
             initialData={editingTransaction}
             decimalSeparator={decimalSeparator}
+            currency={currency}
             notify={notify}
           />
         )}

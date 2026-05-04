@@ -13,7 +13,7 @@ const getAIClient = () => {
   return new GoogleGenAI({ apiKey: key });
 };
 
-export const getFinancialInsights = async (transactions: Transaction[]): Promise<AiInsight[]> => {
+export const getFinancialInsights = async (transactions: Transaction[], currency: string = 'EUR'): Promise<AiInsight[]> => {
   const ai = getAIClient();
   
   if (!ai) {
@@ -27,11 +27,12 @@ export const getFinancialInsights = async (transactions: Transaction[]): Promise
   // Summarize data for the prompt to avoid token limits with huge CSVs
   // We take the last 50 transactions + summary stats
   const recentTransactions = transactions.slice(0, 50).map(t => 
-    `${t.date}: ${t.description} - ${t.amount} (${t.category})`
+    `${t.date}: ${t.description} - ${t.amount} ${currency} (${t.category})`
   ).join('\n');
 
   const prompt = `
     Analyze the following financial transaction data. 
+    All amounts are in ${currency}.
     Provide 3 distinct, short, and actionable insights or observations.
     Focus on spending habits, potential savings, or unusual patterns.
     
@@ -76,14 +77,15 @@ export const getFinancialInsights = async (transactions: Transaction[]): Promise
 
 export const chatWithFinanceData = async (
   query: string, 
-  transactions: Transaction[]
+  transactions: Transaction[],
+  currency: string = 'EUR'
 ): Promise<string> => {
   const ai = getAIClient();
   if (!ai) return "API Key not configured. Please add it in the Admin settings.";
 
   // Providing a simplified context
   const summary = transactions.slice(0, 100).map(t => 
-    `${t.date}: ${t.description} ($${t.amount}) [${t.category}]`
+    `${t.date}: ${t.description} (${t.amount} ${currency}) [${t.category}]`
   ).join('\n');
 
   try {
@@ -92,6 +94,7 @@ export const chatWithFinanceData = async (
       contents: `
         You are a helpful financial assistant. 
         User Question: "${query}"
+        The user's account currency is ${currency}.
         
         Here is a sample of their recent transaction data:
         ${summary}

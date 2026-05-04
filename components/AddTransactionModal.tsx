@@ -12,6 +12,7 @@ interface AddTransactionModalProps {
   accounts: Account[];
   initialData?: Partial<Transaction> | null;
   decimalSeparator: '.' | ',';
+  currency: string;
   notify: (msg: string, type?: 'success' | 'error' | 'info') => void;
 }
 
@@ -128,6 +129,7 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
   accounts,
   initialData,
   decimalSeparator,
+  currency,
   notify
 }) => {
   const [transferDir, setTransferDir] = useState<'in' | 'out'>('out');
@@ -350,7 +352,7 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
           {/* Amount & Date Row */}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-semibold text-slate-500 mb-1">Amount (€)</label>
+              <label className="block text-xs font-semibold text-slate-500 mb-1">Amount ({currency})</label>
               <div className="relative">
                 <DollarSign className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
                 <input

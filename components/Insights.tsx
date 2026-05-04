@@ -5,9 +5,10 @@ import { getFinancialInsights, chatWithFinanceData } from '../services/geminiSer
 
 interface InsightsProps {
   transactions: Transaction[];
+  currency: string;
 }
 
-export const Insights: React.FC<InsightsProps> = ({ transactions }) => {
+export const Insights: React.FC<InsightsProps> = ({ transactions, currency }) => {
   const [insights, setInsights] = useState<AiInsight[]>([]);
   const [loading, setLoading] = useState(false);
   const [chatQuery, setChatQuery] = useState('');
@@ -18,7 +19,7 @@ export const Insights: React.FC<InsightsProps> = ({ transactions }) => {
     let isMounted = true;
     const fetchInsights = async () => {
       setLoading(true);
-      const data = await getFinancialInsights(transactions);
+      const data = await getFinancialInsights(transactions, currency);
       if (isMounted) {
         setInsights(data);
         setLoading(false);
@@ -37,7 +38,7 @@ export const Insights: React.FC<InsightsProps> = ({ transactions }) => {
     if (!chatQuery.trim()) return;
     
     setChatLoading(true);
-    const response = await chatWithFinanceData(chatQuery, transactions);
+    const response = await chatWithFinanceData(chatQuery, transactions, currency);
     setChatResponse(response);
     setChatLoading(false);
   };

@@ -11,6 +11,7 @@ interface TransactionSearchProps {
   onDelete: (id: string) => void;
   decimalSeparator: '.' | ',';
   dateFormat: string;
+  currency: string;
 }
 
 export const TransactionSearch: React.FC<TransactionSearchProps> = ({ 
@@ -19,7 +20,8 @@ export const TransactionSearch: React.FC<TransactionSearchProps> = ({
   onEdit, 
   onDelete, 
   decimalSeparator,
-  dateFormat 
+  dateFormat,
+  currency
 }) => {
   const [results, setResults] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(false);
@@ -248,7 +250,7 @@ export const TransactionSearch: React.FC<TransactionSearchProps> = ({
                       </span>
                     </td>
                     <td className={`px-4 sm:px-6 py-3 text-right font-semibold whitespace-nowrap ${t.type === 'Income' ? 'text-emerald-600' : 'text-slate-800'}`}>
-                      {t.type === 'Income' ? '+' : ''}{formatCurrency(t.amount, decimalSeparator)}
+                      {t.type === 'Income' ? '+' : ''}{formatCurrency(t.amount, decimalSeparator, currency)}
                     </td>
                     <td className="px-4 sm:px-6 py-3 text-right whitespace-nowrap">
                         <div className="flex items-center justify-end space-x-2">

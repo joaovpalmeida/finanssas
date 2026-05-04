@@ -14,6 +14,7 @@ interface FileUploadProps {
   accounts: Account[];
   defaultDateFormat?: string;
   defaultDecimalSeparator?: '.' | ',';
+  currency?: string;
 }
 
 type DuplicateStatus = 'none' | 'db' | 'file';
@@ -30,7 +31,8 @@ export const FileUpload: React.FC<FileUploadProps> = ({
   categories,
   accounts,
   defaultDateFormat,
-  defaultDecimalSeparator 
+  defaultDecimalSeparator,
+  currency 
 }) => {
   const [isDragging, setIsDragging] = useState(false);
   const [defaultDate, setDefaultDate] = useState(new Date().toISOString().split('T')[0]);
@@ -627,11 +629,11 @@ export const FileUpload: React.FC<FileUploadProps> = ({
          <div className="flex flex-wrap gap-4 mb-4 text-sm">
             <div className="bg-white px-4 py-2 rounded-lg border border-slate-200 flex-1">
                <span className="text-slate-500 block text-xs uppercase font-bold">Selected Income</span>
-               <span className="text-emerald-600 font-bold">{formatCurrency(totalIncome)}</span>
+               <span className="text-emerald-600 font-bold">{formatCurrency(totalIncome, defaultDecimalSeparator, currency)}</span>
             </div>
             <div className="bg-white px-4 py-2 rounded-lg border border-slate-200 flex-1">
                <span className="text-slate-500 block text-xs uppercase font-bold">Selected Expense</span>
-               <span className="text-red-600 font-bold">{formatCurrency(totalExpense)}</span>
+               <span className="text-red-600 font-bold">{formatCurrency(totalExpense, defaultDecimalSeparator, currency)}</span>
             </div>
             {duplicateCount > 0 && (
                 <div className="bg-amber-50 px-4 py-2 rounded-lg border border-amber-200 flex-1 flex items-center">
@@ -688,9 +690,9 @@ export const FileUpload: React.FC<FileUploadProps> = ({
                       const rowClass = isDup ? (isSelected ? 'bg-amber-50 hover:bg-amber-100' : 'bg-amber-50/50 opacity-60 hover:opacity-100') : (isSelected ? 'bg-white hover:bg-slate-50' : 'bg-slate-50/50 hover:bg-slate-50');
 
                       return (
-                        <tr key={t.id} className={`${rowClass} transition-colors cursor-pointer`} onClick={() => toggleSelection(t.id)}>
-                          <td className="px-4 py-2 text-center" onClick={(e) => e.stopPropagation()}>
-                             <button onClick={() => toggleSelection(t.id)} className="focus:outline-none">
+                        <tr key={t.id} className={`${rowClass} transition-colors`}>
+                          <td className="px-4 py-2 text-center">
+                             <button onClick={() => toggleSelection(t.id)} className="focus:outline-none cursor-pointer">
                                  {isSelected ? (
                                      <CheckSquare className={`w-5 h-5 ${isDup ? 'text-amber-600' : 'text-blue-600'}`} />
                                  ) : (
@@ -749,7 +751,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({
                             )}
                           </td>
                           <td className={`px-4 py-2 text-right font-medium ${t.type === 'Income' ? 'text-emerald-600' : 'text-slate-800'}`}>
-                            {t.type === 'Income' ? '+' : ''}{formatCurrency(t.amount)}
+                            {t.type === 'Income' ? '+' : ''}{formatCurrency(t.amount, defaultDecimalSeparator, currency)}
                           </td>
                           <td className="px-4 py-2 text-slate-500 text-xs">{t.account}</td>
                         </tr>

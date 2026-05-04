@@ -9,6 +9,7 @@ interface SavingsGoalsProps {
   accountBalances: { account: string; balance: number }[];
   decimalSeparator: '.' | ',';
   dateFormat: string;
+  currency: string;
   notify: (msg: string, type?: 'success' | 'error' | 'info') => void;
 }
 
@@ -16,6 +17,7 @@ export const SavingsGoals: React.FC<SavingsGoalsProps> = ({
   accountBalances, 
   decimalSeparator,
   dateFormat,
+  currency,
   notify
 }) => {
   const [goals, setGoals] = useState<SavingsGoal[]>([]);
@@ -181,7 +183,7 @@ export const SavingsGoals: React.FC<SavingsGoalsProps> = ({
               />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-slate-500 mb-1">Target Amount (€)</label>
+              <label className="block text-xs font-semibold text-slate-500 mb-1">Target Amount ({currency})</label>
               <input
                 type="number"
                 required
@@ -222,7 +224,7 @@ export const SavingsGoals: React.FC<SavingsGoalsProps> = ({
                           }
                         `}
                       >
-                        {acc.account} <span className="opacity-75 text-xs">({formatCurrency(acc.balance, decimalSeparator)})</span>
+                        {acc.account} <span className="opacity-75 text-xs">({formatCurrency(acc.balance, decimalSeparator, currency)})</span>
                       </button>
                     )
                  })}
@@ -308,8 +310,8 @@ export const SavingsGoals: React.FC<SavingsGoalsProps> = ({
                       ></div>
                     </div>
                     <div className="flex justify-between text-xs text-slate-400 mt-1">
-                      <span>{formatCurrency(status.currentBalance, decimalSeparator)}</span>
-                      <span>{formatCurrency(goal.targetAmount, decimalSeparator)}</span>
+                      <span>{formatCurrency(status.currentBalance, decimalSeparator, currency)}</span>
+                      <span>{formatCurrency(goal.targetAmount, decimalSeparator, currency)}</span>
                     </div>
                   </div>
                 </div>
@@ -331,7 +333,7 @@ export const SavingsGoals: React.FC<SavingsGoalsProps> = ({
                             <p className="text-lg font-bold text-slate-800">
                               {status.monthsRemaining <= 0 
                                 ? 'Overdue' 
-                                : formatCurrency(status.monthlyContribution, decimalSeparator)
+                                : formatCurrency(status.monthlyContribution, decimalSeparator, currency)
                               }
                             </p>
                             {status.monthsRemaining > 0 && (

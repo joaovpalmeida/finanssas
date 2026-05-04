@@ -645,7 +645,7 @@ export const savePrivacySetting = async (isEnabled: boolean) => {
   await saveDB();
 }
 
-export const saveImportConfig = async (config: { dateFormat?: string, decimalSeparator?: string }) => {
+export const saveImportConfig = async (config: { dateFormat?: string, decimalSeparator?: string, currency?: string }) => {
   if (!db) return;
   db.run("BEGIN TRANSACTION");
   if (config.dateFormat !== undefined) {
@@ -654,22 +654,28 @@ export const saveImportConfig = async (config: { dateFormat?: string, decimalSep
   if (config.decimalSeparator !== undefined) {
     db.run("INSERT OR REPLACE INTO configs (key, value) VALUES ('import_decimal_separator', ?)", [config.decimalSeparator]);
   }
+  if (config.currency !== undefined) {
+    db.run("INSERT OR REPLACE INTO configs (key, value) VALUES ('app_currency', ?)", [config.currency]);
+  }
   db.run("COMMIT");
   await saveDB();
 }
 
-export const getImportConfig = (): { dateFormat: string, decimalSeparator: string } => {
-  if (!db) return { dateFormat: '', decimalSeparator: '.' };
+export const getImportConfig = (): { dateFormat: string, decimalSeparator: string, currency: string } => {
+  if (!db) return { dateFormat: '', decimalSeparator: '.', currency: 'EUR' };
   try {
-    const result = { dateFormat: '', decimalSeparator: '.' };
+    const result = { dateFormat: '', decimalSeparator: '.', currency: 'EUR' };
     const dateRes = db.exec("SELECT value FROM configs WHERE key = 'import_date_format'");
     if (dateRes.length > 0) result.dateFormat = dateRes[0].values[0][0] as string;
 
     const sepRes = db.exec("SELECT value FROM configs WHERE key = 'import_decimal_separator'");
     if (sepRes.length > 0) result.decimalSeparator = sepRes[0].values[0][0] as string;
 
+    const curRes = db.exec("SELECT value FROM configs WHERE key = 'app_currency'");
+    if (curRes.length > 0) result.currency = curRes[0].values[0][0] as string;
+
     return result;
-  } catch(e) { return { dateFormat: '', decimalSeparator: '.' }; }
+  } catch(e) { return { dateFormat: '', decimalSeparator: '.', currency: 'EUR' }; }
 }
 
 export const getFiscalConfig = (): FiscalConfig => {

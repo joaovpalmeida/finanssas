@@ -17,6 +17,7 @@ interface DashboardProps {
   onNavigateToAdmin: () => void;
   decimalSeparator: '.' | ',';
   dateFormat: string;
+  currency: string;
 }
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#6366f1', '#14b8a6'];
@@ -30,7 +31,8 @@ const StatCard: React.FC<{
   tooltip?: string;
   isPercentage?: boolean;
   decimalSeparator: '.' | ',';
-}> = ({ title, amount, icon, colorClass, privacyMode, tooltip, isPercentage, decimalSeparator }) => (
+  currency: string;
+}> = ({ title, amount, icon, colorClass, privacyMode, tooltip, isPercentage, decimalSeparator, currency }) => (
   <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 flex items-center justify-between group relative">
     <div>
       <div className="flex items-center space-x-1 mb-1">
@@ -45,7 +47,7 @@ const StatCard: React.FC<{
         )}
       </div>
       <h3 className="text-2xl font-bold text-slate-800">
-        {privacyMode ? '••••••' : (isPercentage ? `${amount.toFixed(1)}%` : formatCurrency(amount, decimalSeparator))}
+        {privacyMode ? '••••••' : (isPercentage ? `${amount.toFixed(1)}%` : formatCurrency(amount, decimalSeparator, currency))}
       </h3>
     </div>
     <div className={`p-3 rounded-full ${colorClass} bg-opacity-10`}>
@@ -62,7 +64,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
   onDelete, 
   onNavigateToAdmin, 
   decimalSeparator,
-  dateFormat
+  dateFormat,
+  currency
 }) => {
   const [showCharts, setShowCharts] = useState(false);
   const [privacyMode, setPrivacyMode] = useState(true); // Default to true (hidden)
@@ -314,6 +317,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
           colorClass="bg-emerald-100"
           privacyMode={privacyMode}
           decimalSeparator={decimalSeparator}
+          currency={currency}
         />
         <StatCard 
           title="Expenses" 
@@ -322,6 +326,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
           colorClass="bg-red-100"
           privacyMode={privacyMode}
           decimalSeparator={decimalSeparator}
+          currency={currency}
         />
         {hasSavingsAccounts && (
           <StatCard 
@@ -333,6 +338,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
             isPercentage
             tooltip="Percentage of income added to Savings Accounts this period"
             decimalSeparator={decimalSeparator}
+            currency={currency}
           />
         )}
         <StatCard 
@@ -343,6 +349,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
           privacyMode={privacyMode}
           tooltip={`Includes only checking and regular accounts (Savings excluded)${!isCurrentView ? ' at end of selected period' : ''}`}
           decimalSeparator={decimalSeparator}
+          currency={currency}
         />
       </div>
 
@@ -354,7 +361,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
             {isCurrentView ? 'Current Account Balances' : 'Account Balances (End of Period)'}
           </div>
           <span className="text-xs font-normal text-slate-400 bg-slate-50 px-2 py-1 rounded">
-             Total Net Worth: {privacyMode ? '••••••' : formatCurrency(totalNetWorth, decimalSeparator)}
+             Total Net Worth: {privacyMode ? '••••••' : formatCurrency(totalNetWorth, decimalSeparator, currency)}
           </span>
         </h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -373,7 +380,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                     {acc.account}
                   </p>
                   <p className={`font-bold ${acc.balance >= 0 ? 'text-slate-800' : 'text-red-600'}`}>
-                    {privacyMode ? '••••••' : formatCurrency(acc.balance, decimalSeparator)}
+                    {privacyMode ? '••••••' : formatCurrency(acc.balance, decimalSeparator, currency)}
                   </p>
                 </div>
               </div>
@@ -399,7 +406,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                       <div className="flex items-center justify-between border-b border-slate-100 pb-2">
                          <h4 className="font-bold text-slate-700">{groupName} Expenses</h4>
                          <span className="text-sm font-semibold text-slate-900">
-                           {privacyMode ? '••••••' : formatCurrency(data.total, decimalSeparator)}
+                           {privacyMode ? '••••••' : formatCurrency(data.total, decimalSeparator, currency)}
                          </span>
                       </div>
                       <div className="space-y-3">
@@ -410,7 +417,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                                 <div className="flex justify-between text-sm z-10 relative mb-1">
                                    <span className="text-slate-600">{catName}</span>
                                    <span className="font-medium text-slate-700">
-                                     {privacyMode ? '••••••' : formatCurrency(amount as number, decimalSeparator)}
+                                     {privacyMode ? '••••••' : formatCurrency(amount as number, decimalSeparator, currency)}
                                    </span>
                                 </div>
                                 <div className="w-full bg-slate-50 rounded-full h-1.5 overflow-hidden">
@@ -491,11 +498,11 @@ export const Dashboard: React.FC<DashboardProps> = ({
                       <td className="px-4 sm:px-6 py-3 text-right whitespace-nowrap">
                         <div className="flex flex-col items-end gap-0.5">
                           <span className={`font-semibold ${t.type === 'Income' || isPositiveBalance ? 'text-emerald-600' : 'text-slate-800'}`}>
-                            {t.type === 'Income' || isPositiveBalance ? '+' : ''}{formatCurrency(t.amount, decimalSeparator)}
+                            {t.type === 'Income' || isPositiveBalance ? '+' : ''}{formatCurrency(t.amount, decimalSeparator, currency)}
                           </span>
                           {t.balanceAfterTransaction !== undefined && (
                             <span className="text-xs text-slate-400 font-medium">
-                              {privacyMode ? '••••••' : formatCurrency(t.balanceAfterTransaction, decimalSeparator)}
+                              {privacyMode ? '••••••' : formatCurrency(t.balanceAfterTransaction, decimalSeparator, currency)}
                             </span>
                           )}
                         </div>

@@ -1,11 +1,19 @@
 import { Transaction, TransactionType, Category, FiscalConfig } from '../types';
 
-export const formatCurrency = (amount: number, decimalSeparator: '.' | ',' = '.'): string => {
+export const formatCurrency = (amount: number, decimalSeparator: '.' | ',' = '.', currency: string = 'EUR'): string => {
   const locale = decimalSeparator === ',' ? 'de-DE' : 'en-US';
-  return new Intl.NumberFormat(locale, {
-    style: 'currency',
-    currency: 'EUR',
-  }).format(amount);
+  try {
+    return new Intl.NumberFormat(locale, {
+      style: 'currency',
+      currency: currency,
+    }).format(amount);
+  } catch (e) {
+    // Fallback to EUR if currency is invalid
+    return new Intl.NumberFormat(locale, {
+      style: 'currency',
+      currency: 'EUR',
+    }).format(amount);
+  }
 };
 
 export const parseAmountInput = (value: string, decimalSeparator: '.' | ','): number => {

@@ -16,6 +16,7 @@ interface AdminPageProps {
   uploadError: string | null;
   decimalSeparator: '.' | ',';
   dateFormat: string;
+  currency: string;
   notify: (msg: string, type?: 'success' | 'error' | 'info') => void;
 }
 
@@ -29,6 +30,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
   uploadError,
   decimalSeparator,
   dateFormat,
+  currency,
   notify
 }) => {
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -134,6 +136,16 @@ export const AdminPage: React.FC<AdminPageProps> = ({
       }
   };
 
+  const handleUpdateCurrency = async (val: string) => {
+    try {
+        await saveImportConfig({ currency: val });
+        refreshData();
+        notify("Currency updated", "info");
+    } catch (e) {
+        notify("Failed to save currency", "error");
+    }
+  };
+
   const handleCreateAccount = async (name: string, isSavings: boolean) => {
     if (!name.trim()) return;
     try {
@@ -217,6 +229,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                 accounts={accounts}
                 defaultDateFormat={dateFormat}
                 defaultDecimalSeparator={decimalSeparator}
+                currency={currency}
               />
            </div>
         )}
@@ -290,6 +303,27 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                   <option value="DD/MM/YYYY">DD/MM/YYYY</option>
                   <option value="MM/DD/YYYY">MM/DD/YYYY</option>
                   <option value="YYYY-MM-DD">YYYY-MM-DD</option>
+               </select>
+            </div>
+
+            <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+               <div>
+                 <p className="text-xs font-bold text-slate-500 uppercase">System Currency</p>
+                 <p className="text-sm font-medium text-slate-700">{currency}</p>
+               </div>
+               <select 
+                  value={currency}
+                  onChange={(e) => handleUpdateCurrency(e.target.value)}
+                  className="text-xs border rounded p-1 bg-white"
+               >
+                  <option value="EUR">EUR (€)</option>
+                  <option value="USD">USD ($)</option>
+                  <option value="GBP">GBP (£)</option>
+                  <option value="BRL">BRL (R$)</option>
+                  <option value="JPY">JPY (¥)</option>
+                  <option value="CAD">CAD ($)</option>
+                  <option value="AUD">AUD ($)</option>
+                  <option value="CHF">CHF (Fr)</option>
                </select>
             </div>
           </div>
