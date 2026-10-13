@@ -305,15 +305,15 @@ export const parseExcelFile = (
                 description = mapping.manualDescription;
             }
 
-            let category = 'Uncategorized';
-            if (specificCatIdx !== -1 && row[specificCatIdx]) {
-                category = String(row[specificCatIdx]);
+            let category = '';
+            if (specificCatIdx !== -1 && row[specificCatIdx] !== undefined && row[specificCatIdx] !== null) {
+                category = String(row[specificCatIdx]).trim();
             } else if (specificManualCategory) {
-                category = specificManualCategory;
-            } else if (categoryIndex !== -1 && row[categoryIndex]) {
-                category = String(row[categoryIndex]);
+                category = specificManualCategory.trim();
+            } else if (categoryIndex !== -1 && row[categoryIndex] !== undefined && row[categoryIndex] !== null) {
+                category = String(row[categoryIndex]).trim();
             } else if (mapping?.manualCategory) {
-                category = mapping.manualCategory;
+                category = mapping.manualCategory.trim();
             }
             
             return {

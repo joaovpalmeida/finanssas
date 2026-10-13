@@ -329,23 +329,30 @@ export const insertTransactions = async (transactions: Transaction[]) => {
     
     transactions.forEach(t => {
         if (t.category && !t.categoryId) {
+             const trimmedCat = t.category.trim();
              const type = t.type || 'Expense';
-             if (!catKeys.some(k => k.name === t.category && k.type === type)) {
-                 catKeys.push({ name: t.category, type });
+             if (!catKeys.some(k => k.name === trimmedCat && k.type === type)) {
+                 catKeys.push({ name: trimmedCat, type });
              }
         }
     });
 
     for (const k of catKeys) {
+        let id: string;
         const res = db.exec("SELECT id FROM categories WHERE name = ? AND type = ?", [k.name, k.type]);
-        let id;
         if (res.length > 0) {
             id = res[0].values[0][0] as string;
         } else {
-            id = `cat-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
-            db.run("INSERT INTO categories (id, name, type, group_name) VALUES (?, ?, ?, 'General')", [id, k.name, k.type]);
+            const ciRes = db.exec("SELECT id FROM categories WHERE LOWER(TRIM(name)) = LOWER(TRIM(?)) AND type = ?", [k.name, k.type]);
+            if (ciRes.length > 0) {
+                id = ciRes[0].values[0][0] as string;
+            } else {
+                id = `cat-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+                db.run("INSERT INTO categories (id, name, type, group_name) VALUES (?, ?, ?, 'General')", [id, k.name, k.type]);
+            }
         }
         categoryMap.set(`${k.name}:${k.type}`, id);
+        categoryMap.set(`${k.name.toLowerCase()}:${k.type}`, id);
     }
 
     const insertTxn = db.prepare(`
@@ -363,7 +370,8 @@ export const insertTransactions = async (transactions: Transaction[]) => {
         let catId = t.categoryId;
         if (!catId && t.category) {
             const type = t.type || 'Expense';
-            catId = categoryMap.get(`${t.category}:${type}`) || '';
+            const catName = t.category.trim();
+            catId = categoryMap.get(`${catName}:${type}`) || categoryMap.get(`${catName.toLowerCase()}:${type}`) || '';
         }
         
         const finalCatId = catId || null;
@@ -1004,6 +1012,108 @@ export const getCategorySuggestions = (): Record<string, string> => {
   } catch (e) {
     console.error("Error fetching category suggestions", e);
     return {};
+  }
+};
+
+export interface HistoricalCategoryMatch {
+  name: string;
+  id: string;
+}
+
+export interface HistoricalCategoryLookup {
+  findMatch: (desc: string, accountName: string, amount: number, type: string) => HistoricalCategoryMatch | null;
+}
+
+export const getHistoricalCategoryLookup = (): HistoricalCategoryLookup => {
+  if (!db) return { findMatch: () => null };
+  try {
+    const sql = `
+      SELECT t.description, a.name as account_name, t.amount, t.type, c.name as category_name, c.id as category_id
+      FROM transactions t
+      JOIN categories c ON t.category_id = c.id
+      LEFT JOIN accounts a ON t.account_id = a.id
+      WHERE t.category_id IS NOT NULL 
+        AND c.name IS NOT NULL 
+        AND c.name != '' 
+        AND LOWER(TRIM(c.name)) != 'uncategorized'
+      ORDER BY t.date DESC, t.id DESC
+    `;
+    const res = db.exec(sql);
+    if (res.length === 0) return { findMatch: () => null };
+
+    const byDescAccAmtType = new Map<string, HistoricalCategoryMatch>();
+    const byDescAccType = new Map<string, HistoricalCategoryMatch>();
+    const byDescType = new Map<string, HistoricalCategoryMatch>();
+    const byDesc = new Map<string, HistoricalCategoryMatch>();
+
+    const values = res[0].values;
+    // Iterate to index the most recent categorization
+    values.forEach((row: any[]) => {
+      const desc = String(row[0] || '').trim().toLowerCase();
+      const acc = String(row[1] || '').trim().toLowerCase();
+      const rawAmt = Number(row[2]);
+      const amtKey = Math.abs(isNaN(rawAmt) ? 0 : rawAmt).toFixed(2);
+      const type = String(row[3] || '').trim().toLowerCase();
+      const catName = String(row[4] || '').trim();
+      const catId = String(row[5] || '');
+
+      if (!desc || !catName) return;
+
+      const matchObj: HistoricalCategoryMatch = { name: catName, id: catId };
+
+      const key1 = `${desc}|${acc}|${amtKey}|${type}`;
+      if (!byDescAccAmtType.has(key1)) {
+        byDescAccAmtType.set(key1, matchObj);
+      }
+
+      const key2 = `${desc}|${acc}|${type}`;
+      if (!byDescAccType.has(key2)) {
+        byDescAccType.set(key2, matchObj);
+      }
+
+      const key3 = `${desc}|${type}`;
+      if (!byDescType.has(key3)) {
+        byDescType.set(key3, matchObj);
+      }
+
+      const key4 = desc;
+      if (!byDesc.has(key4)) {
+        byDesc.set(key4, matchObj);
+      }
+    });
+
+    return {
+      findMatch: (desc: string, accountName: string, amount: number, type: string): HistoricalCategoryMatch | null => {
+        const d = (desc || '').trim().toLowerCase();
+        if (!d) return null;
+        const acc = (accountName || '').trim().toLowerCase();
+        const amtKey = Math.abs(amount || 0).toFixed(2);
+        const t = (type || '').trim().toLowerCase();
+
+        // 1. Desc + Account + Amount + Type
+        if (acc) {
+          const m1 = byDescAccAmtType.get(`${d}|${acc}|${amtKey}|${t}`);
+          if (m1) return m1;
+
+          // 2. Desc + Account + Type
+          const m2 = byDescAccType.get(`${d}|${acc}|${t}`);
+          if (m2) return m2;
+        }
+
+        // 3. Desc + Type
+        const m3 = byDescType.get(`${d}|${t}`);
+        if (m3) return m3;
+
+        // 4. Desc fallback
+        const m4 = byDesc.get(d);
+        if (m4) return m4;
+
+        return null;
+      }
+    };
+  } catch (e) {
+    console.error("Error building historical category lookup", e);
+    return { findMatch: () => null };
   }
 };
 

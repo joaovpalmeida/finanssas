@@ -4,7 +4,7 @@ import { Upload, FileSpreadsheet, Loader2, AlertCircle, ArrowRight, Settings, La
 import { getExcelColumns, getExcelSheetNames, parseExcelFile, ColumnMapping, ExcelColumn } from '../utils/excelParser';
 import { Transaction, Category, Account, ImportTemplate } from '../types';
 import { formatCurrency, generateTransactionSignature } from '../utils/helpers';
-import { getExistingSignatures, saveImportConfig, getImportConfig, getCategorySuggestions, getImportTemplates, saveImportTemplate } from '../services/db';
+import { getExistingSignatures, saveImportConfig, getImportConfig, getCategorySuggestions, getImportTemplates, saveImportTemplate, getHistoricalCategoryLookup, getCategories } from '../services/db';
 
 interface FileUploadProps {
   onUpload: (data: Transaction[]) => void;
@@ -219,8 +219,20 @@ export const FileUpload: React.FC<FileUploadProps> = ({
              setParseError("No valid transactions found with the current mapping. Please check row ranges and column selections.");
         } else {
             const existingSignatures = getExistingSignatures();
-            const categorySuggestions = getCategorySuggestions();
+            const historicalLookup = getHistoricalCategoryLookup();
             
+            // Build direct category lookup map from categories (name trimmed & lowercase -> category object by type)
+            const currentCategories = categories && categories.length > 0 ? categories : getCategories();
+            const categoryMap = new Map<string, Category>();
+            currentCategories.forEach(c => {
+                if (c && c.name) {
+                    const key = `${c.name.trim().toLowerCase()}:${c.type}`;
+                    if (!categoryMap.has(key)) {
+                        categoryMap.set(key, c);
+                    }
+                }
+            });
+
             const processedPreview: PreviewTransaction[] = [];
             const fileSignatures = new Set<string>();
             const initialSelection = new Set<string>();
@@ -230,13 +242,47 @@ export const FileUpload: React.FC<FileUploadProps> = ({
                 let status: DuplicateStatus = 'none';
                 let autoCat = false;
 
-                if (t.category === 'Uncategorized') {
-                    const match = categorySuggestions[t.description.trim().toLowerCase()];
-                    if (match) {
-                        t.category = match;
+                const rawCat = (t.category || '').trim();
+                const isBlank = !rawCat || rawCat.toLowerCase() === 'uncategorized';
+
+                let resolvedCategory = '';
+                let resolvedCategoryId = '';
+
+                // Tier 1: Trim and lower original category name and search categories table for same name and type
+                if (!isBlank) {
+                    const key = `${rawCat.toLowerCase()}:${t.type}`;
+                    const directMatch = categoryMap.get(key);
+                    if (directMatch) {
+                        resolvedCategory = directMatch.name;
+                        resolvedCategoryId = directMatch.id;
+                    }
+                }
+
+                // Tier 2: If no category found, look at existing transactions by description/account/value
+                if (!resolvedCategory) {
+                    const histMatch = historicalLookup.findMatch(t.description, t.account, t.amount, t.type);
+                    if (histMatch) {
+                        resolvedCategory = histMatch.name;
+                        resolvedCategoryId = histMatch.id;
                         autoCat = true;
                     }
                 }
+
+                // Tier 3: Fallback
+                if (!resolvedCategory) {
+                    if (isBlank) {
+                        // If category is left blank (or Uncategorized), assign Uncategorized
+                        resolvedCategory = 'Uncategorized';
+                        resolvedCategoryId = '';
+                    } else {
+                        // Keep the trimmed original category name
+                        resolvedCategory = rawCat;
+                        resolvedCategoryId = '';
+                    }
+                }
+
+                t.category = resolvedCategory;
+                t.categoryId = resolvedCategoryId;
 
                 if (existingSignatures.has(sig)) {
                     status = 'db';
@@ -354,8 +400,9 @@ export const FileUpload: React.FC<FileUploadProps> = ({
   };
 
   const availableCategories = useMemo(() => {
-    const fileCats = new Set(parsedPreview.map(t => t.category));
-    const dbCats = new Set(categories.map(c => c.name));
+    const fileCats = new Set(parsedPreview.map(t => (t.category || '').trim()).filter(Boolean));
+    const currentCategories = categories && categories.length > 0 ? categories : getCategories();
+    const dbCats = new Set(currentCategories.map(c => (c.name || '').trim()).filter(Boolean));
     const all = new Set([...fileCats, ...dbCats]);
     return Array.from(all).sort();
   }, [parsedPreview, categories]);
@@ -390,12 +437,21 @@ export const FileUpload: React.FC<FileUploadProps> = ({
   };
 
   const applyRename = (targetId: string, newName: string, applyToAll: boolean, oldName?: string) => {
+      const trimmedNew = newName.trim();
+      const currentCategories = categories && categories.length > 0 ? categories : getCategories();
+
       setParsedPreview(prev => prev.map(t => {
+          const matchExisting = currentCategories.find(
+              c => c.name.trim().toLowerCase() === trimmedNew.toLowerCase() && c.type === t.type
+          );
+          const finalName = matchExisting ? matchExisting.name : trimmedNew;
+          const finalId = matchExisting ? matchExisting.id : '';
+
           if (applyToAll && t.category === oldName) {
-              return { ...t, category: newName };
+              return { ...t, category: finalName, categoryId: finalId, isAutoCategorized: false };
           }
           if (t.id === targetId) {
-              return { ...t, category: newName };
+              return { ...t, category: finalName, categoryId: finalId, isAutoCategorized: false };
           }
           return t;
       }));
