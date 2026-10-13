@@ -1,56 +1,56 @@
-# GitHub Pages & AI Studio Dual-Environment Compatibility Plan
+# Historical-First Category Resolution Plan
 
-Configure Vite and build tooling to achieve full dual-environment compatibility across both GitHub Pages (`joaovpalmeida.github.io/finanssas/`) and the AI Studio hosting environment (`/`), while restoring the original `index.html` `<head>` tags (restoring the original `<title>` and removing the added `<meta>` tags).
+Reorder the category resolution pipeline during transaction import so that existing transaction history takes top priority, followed by matching against the categories table, and finally fallback handling.
 
 ## User Review & Critical Decisions
 
 > [!IMPORTANT]
-> The following decisions incorporate your requested revisions:
+> The following decisions were confirmed to govern the updated import pipeline:
 
-- **Confirmed Decision 1**: Configure a universal relative base (`base: './'`) in `vite.config.ts`. This ensures built assets (scripts, styles, and chunks) resolve correctly regardless of whether the site is served from a repository subpath (`/finanssas/`) or root (`/`).
-- **Confirmed Decision 2 (Revision)**: Restore original `index.html` tags:
-  - Restore `<title>Finan$$as - Smart Personal Finance</title>`.
-  - Remove all newly added `<meta>` tags (`description`, `og:title`, and `og:description`), keeping only the original `charset` and `viewport` tags.
-- **Confirmed Decision 3**: Retain all TypeScript fixes (`BudgetType` & `MonthlyBudget` imports in `services/db.ts`), `tsconfig.json`, and clean package configuration so that the existing GitHub Actions workflow (`static.yml`) runs and deploys smoothly without compilation failures.
+- **Confirmed Decision 1**: **Historical transactions take top priority**. Even if an imported row specifies a category, the system will first attempt to infer the category from existing database transactions matching the transaction description, account, and amount.
+- **Confirmed Decision 2**: **Sparkle badge enabled**. Any transaction whose category is resolved via historical transactions will display the sparkle icon (`Sparkles`) in the preview grid with a tooltip indicating it was auto-suggested from history.
+- **Confirmed Decision 3**: **Secondary & Fallback tiers**:
+  - If no historical match is found, match the imported category name against the `categories` table (trimmed, case-insensitive, matching transaction type `Income` vs `Expense`).
+  - If still unmatched and the imported category is blank or `'Uncategorized'`, assign `'Uncategorized'`.
+  - If still unmatched and a non-blank category was provided in the file, retain the trimmed original name (creating a new category upon import if needed).
 
 ---
 
 ## 1. Overview & Core Concept
 
-- **What It Does**: Enables Finanssas to build and execute identically in both deployment environments:
-  - **GitHub Pages**: Served under the subfolder path `https://joaovpalmeida.github.io/finanssas/`
-  - **AI Studio**: Served from the root path `https://ais-dev-...run.app/`
-- **Target Audience**: Existing users accessing the GitHub Pages live deployment as well as developers previewing and editing the app in AI Studio.
-- **Key Value**: Prevents blank screens and 404 asset errors when pushing updates to the repository, while strictly preserving your original HTML structure and branding.
+- **What It Does**: During Excel/CSV import parsing, transactions are categorized through an inverted priority hierarchy:
+  1. **Tier 1 (Historical Match First)**: Look up existing database transactions by description, account, amount, and type. If found, apply the historical category and set `isAutoCategorized = true`.
+  2. **Tier 2 (Category Table Match)**: If no historical match exists and the row has a category, match against the `categories` table (case-insensitive & trimmed).
+  3. **Tier 3 (Fallback)**: If still unmatched, use the raw trimmed category if provided, or default to `'Uncategorized'`.
+- **Target Audience**: Users regularly importing bank statements where descriptions repeat and should automatically adopt their established categorization rules.
+- **Key Value**: Reduces manual tagging effort by automatically applying past categorization choices across recurring payees, vendors, and account patterns.
 
 ---
 
-## 2. User Experience & Deployment Flow
+## 2. User Experience & Visual Design
 
-- **Deployment Flow**:
-  1. Changes are pushed to GitHub (`main` branch).
-  2. GitHub Actions (`.github/workflows/static.yml`) triggers `npm install` and `npm run build`.
-  3. Vite compiles the application with `./assets/...` relative asset paths into `dist/`.
-  4. GitHub Pages deploys `dist/` to `https://joaovpalmeida.github.io/finanssas/`.
-  5. The browser successfully loads all scripts and styles relative to the `/finanssas/` path.
-- **App Experience**: The original document title `Finan$$as - Smart Personal Finance` is displayed in the browser tab. The head metadata matches the original repository state.
+- **Import Preview Screen**:
+  - Transactions matched from existing history display the canonical category name and the sparkle badge (`Sparkles`) with the tooltip *"Auto-suggested from transaction history"*.
+  - Transactions matched directly from the categories table or raw input display their category cleanly.
+  - Blank entries show `'Uncategorized'`.
+  - Users retain the ability to manually override or bulk-rename any category inline before clicking "Import".
 
 ---
 
 ## 3. Key Product Decisions & Trade-Offs
 
-- **Decision 1: Universal Relative Base (`./`) vs. Hardcoded Subpath (`/finanssas/`)**
-  - *Chosen Approach*: `base: './'` in `vite.config.ts`.
-  - *Why*: Relative paths work seamlessly across any hosting URL—whether root domain, repository subpath, or custom domain—without requiring build environment variables or separate config files.
-  - *Alternatives Considered*: Hardcoding `base: "/finanssas"` breaks preview in AI Studio; environment-dependent base (`GITHUB_ACTIONS ? '/finanssas/' : '/'`) adds unnecessary CI coupling.
+- **Decision 1: Historical Precedence over File Categories**
+  - *Chosen Approach*: Search historical transactions first, even when the incoming file has a category column.
+  - *Why*: Bank-exported categories (e.g. "Debit POS Purchase" or "General Merchandise") are often generic or inaccurate compared to the user's custom categories previously assigned to those vendors in Finanssas.
+  - *User Control*: The user can still edit any suggested category in the preview grid prior to final import.
 
-- **Decision 2: Original HTML Head Restoration**
-  - *Chosen Approach*: Restore `<title>Finan$$as - Smart Personal Finance</title>` and remove the added `<meta>` tags.
-  - *Why*: Directly honors user request and restores the original HTML head configuration.
-
-- **Decision 3: Preserving TypeScript and Package Fixes**
-  - *Chosen Approach*: Keep the added imports (`BudgetType`, `MonthlyBudget`) in `services/db.ts` and the `tsconfig.json` configuration.
-  - *Why*: Resolves actual compilation errors that would otherwise break `npm run build` during CI runs.
+- **Decision 2: Multi-Criteria Historical Search Depth**
+  - *Chosen Approach*: Retain the existing hierarchical matching in `getHistoricalCategoryLookup`:
+    1. Description + Account + Amount + Type
+    2. Description + Account + Type
+    3. Description + Type
+    4. Description fallback
+  - *Why*: Ensures the most specific historical match wins, preventing cross-account or cross-amount false positives where context differs.
 
 ---
 
@@ -58,41 +58,43 @@ Configure Vite and build tooling to achieve full dual-environment compatibility 
 
 ```
 ┌────────────────────────────────────────────────────────┐
-│                   GitHub Repository                    │
-│                 (joaovpalmeida/finanssas)              │
-└──────────────────────────┬─────────────────────────────┘
-                           │ git push main
-                           ▼
-┌────────────────────────────────────────────────────────┐
-│          GitHub Actions (.github/workflows/static.yml) │
-│          - npm install                                 │
-│          - npm run build (Vite with base: './')        │
-└──────────────────────────┬─────────────────────────────┘
-                           │ outputs dist/
-            ┌──────────────┴──────────────┐
-            ▼                             ▼
- ┌──────────────────────┐      ┌──────────────────────┐
- │    GitHub Pages      │      │      AI Studio       │
- │   (/finanssas/)      │      │         (/)          │
- │                      │      │                      │
- │ - index.html         │      │ - index.html         │
- │   (Original Head)    │      │   (Original Head)    │
- │ - ./assets/*.js      │      │ - ./assets/*.js      │
- │ - ./assets/*.css     │      │ - ./assets/*.css     │
- │                      │      │                      │
- │  ✓ 200 OK (Relative) │      │  ✓ 200 OK (Relative) │
- └──────────────────────┘      └──────────────────────┘
+│                   Imported Row Data                    │
+│       (description, account, amount, type, rawCat)     │
+└───────────────────────────┬────────────────────────────┘
+                            │
+                            ▼
+ ┌──────────────────────────────────────────────────────┐
+ │         Tier 1: Historical Transaction Match         │
+ │   historicalLookup.findMatch(desc, acc, amt, type)   │
+ └──────────────┬───────────────────────────────┬───────┘
+                │ Found                         │ Not Found
+                ▼                               ▼
+     ┌──────────────────────┐      ┌──────────────────────────────┐
+     │ Apply historical     │      │ Tier 2: Category Table Match │
+     │ category & set       │      │ Match rawCat in categoryMap  │
+     │ isAutoCategorized    │      └────────┬──────────────┬──────┘
+     │ (= Sparkle Badge)    │               │ Found        │ Not Found
+     └──────────────────────┘               ▼              ▼
+                               ┌──────────────────┐  ┌──────────────────┐
+                               │ Apply canonical  │  │ Tier 3: Fallback │
+                               │ category from DB │  │ isBlank?         │
+                               └──────────────────┘  │ -> 'Uncategorized'│
+                                                     │ Else -> rawCat   │
+                                                     └──────────────────┘
 ```
 
-### Component & File Mapping
+### Component & File Changes
 
-1. **`vite.config.ts`**:
-   - Set `base: './'` to enforce relative paths across all asset emissions and dynamic chunk imports.
-   - Retain `server: { host: '0.0.0.0', port: 3000, allowedHosts: true }` for AI Studio dev server support.
-2. **`index.html`**:
-   - Restore `<title>Finan$$as - Smart Personal Finance</title>`.
-   - Remove `<meta name="description">`, `<meta property="og:title">`, and `<meta property="og:description">`.
-   - Ensure module script reference remains compatible with relative resolution (`/index.tsx` for Vite dev server, transformed to `./assets/...` during build).
-3. **Verification**:
-   - Run `npm run build` and inspect `dist/index.html` to confirm asset links use `./assets/...`, the original title is present, and extra meta tags are removed.
-   - Run `compile_applet` to confirm build succeeds.
+1. **`components/FileUpload.tsx`**:
+   - In `handleParsePreview`, move the `historicalLookup.findMatch` block before the `categoryMap` lookup.
+   - When `histMatch` is found:
+     - Set `resolvedCategory = histMatch.name`
+     - Set `resolvedCategoryId = histMatch.id`
+     - Set `autoCat = true`
+   - If no `histMatch` was found:
+     - Check `categoryMap` using `${rawCat.toLowerCase()}:${t.type}`
+     - If matched: set `resolvedCategory = directMatch.name`, `resolvedCategoryId = directMatch.id`, `autoCat = false`
+     - Else: fallback to `'Uncategorized'` if blank, or `rawCat` if non-blank.
+2. **Verification**:
+   - Run `lint_applet` and `compile_applet`.
+   - Verify dev server runs cleanly without regressions.

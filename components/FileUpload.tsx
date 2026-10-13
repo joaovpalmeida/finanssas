@@ -248,8 +248,16 @@ export const FileUpload: React.FC<FileUploadProps> = ({
                 let resolvedCategory = '';
                 let resolvedCategoryId = '';
 
-                // Tier 1: Trim and lower original category name and search categories table for same name and type
-                if (!isBlank) {
+                // Tier 1: Look at existing transactions first (by description, account, amount, type)
+                const histMatch = historicalLookup.findMatch(t.description, t.account, t.amount, t.type);
+                if (histMatch) {
+                    resolvedCategory = histMatch.name;
+                    resolvedCategoryId = histMatch.id;
+                    autoCat = true;
+                }
+
+                // Tier 2: If no historical match found and category is provided in row, match categories table
+                if (!resolvedCategory && !isBlank) {
                     const key = `${rawCat.toLowerCase()}:${t.type}`;
                     const directMatch = categoryMap.get(key);
                     if (directMatch) {
@@ -258,17 +266,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({
                     }
                 }
 
-                // Tier 2: If no category found, look at existing transactions by description/account/value
-                if (!resolvedCategory) {
-                    const histMatch = historicalLookup.findMatch(t.description, t.account, t.amount, t.type);
-                    if (histMatch) {
-                        resolvedCategory = histMatch.name;
-                        resolvedCategoryId = histMatch.id;
-                        autoCat = true;
-                    }
-                }
-
-                // Tier 3: Fallback
+                // Tier 3: Fallback if still unmatched
                 if (!resolvedCategory) {
                     if (isBlank) {
                         // If category is left blank (or Uncategorized), assign Uncategorized
