@@ -5,15 +5,16 @@ import react from '@vitejs/plugin-react';
 export default defineConfig(({ mode }) => {
     const env = loadEnv(mode, '.', '');
     return {
-      base:"/finanssas",
+      base: './',
       server: {
         port: 3000,
         host: '0.0.0.0',
+        allowedHosts: true,
       },
       plugins: [react()],
       define: {
-        'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
-        'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
+        'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY || env.API_KEY || ''),
+        'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY || env.API_KEY || ''),
         '__BUILD_DATE__': JSON.stringify(new Date().toISOString().replace('T', ' ').substring(0, 19) + ' UTC')
       },
       resolve: {

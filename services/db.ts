@@ -1,4 +1,4 @@
-import { Transaction, TransactionType, SavingsGoal, Category, Account, CategoryGroup, SearchFilters, FiscalConfig, ImportTemplate } from '../types';
+import { Transaction, TransactionType, SavingsGoal, Category, Account, CategoryGroup, SearchFilters, FiscalConfig, ImportTemplate, BudgetType, MonthlyBudget } from '../types';
 import { generateTransactionSignature } from '../utils/helpers';
 import { encryptDatabase, decryptDatabase, EncryptedData } from '../utils/encryption';
 

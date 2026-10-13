@@ -2,5 +2,7 @@
   "name": "Finanssas",
   "description": "A comprehensive personal finance manager with Excel imports, manual tracking, monthly budgeting, and AI-powered insights, all running locally and privately in your browser.",
   "requestFramePermissions": [],
-  "majorCapabilities": []
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }
