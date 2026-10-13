@@ -1028,7 +1028,7 @@ export const getHistoricalCategoryLookup = (): HistoricalCategoryLookup => {
   if (!db) return { findMatch: () => null };
   try {
     const sql = `
-      SELECT t.description, a.name as account_name, t.amount, t.type, c.name as category_name, c.id as category_id
+      SELECT t.description, a.name as account_name, t.amount, t.type, c.name as category_name, c.id as category_id, t.date
       FROM transactions t
       JOIN categories c ON t.category_id = c.id
       LEFT JOIN accounts a ON t.account_id = a.id
@@ -1041,13 +1041,40 @@ export const getHistoricalCategoryLookup = (): HistoricalCategoryLookup => {
     const res = db.exec(sql);
     if (res.length === 0) return { findMatch: () => null };
 
-    const byDescAccAmtType = new Map<string, HistoricalCategoryMatch>();
-    const byDescAccType = new Map<string, HistoricalCategoryMatch>();
-    const byDescType = new Map<string, HistoricalCategoryMatch>();
-    const byDesc = new Map<string, HistoricalCategoryMatch>();
+    interface CandidateStats {
+      count: number;
+      latestTime: number;
+      name: string;
+      id: string;
+    }
+
+    const map1 = new Map<string, Map<string, CandidateStats>>();
+    const map2 = new Map<string, Map<string, CandidateStats>>();
+    const map3 = new Map<string, Map<string, CandidateStats>>();
+    const map4 = new Map<string, Map<string, CandidateStats>>();
+
+    const recordCandidate = (
+      targetMap: Map<string, Map<string, CandidateStats>>, 
+      key: string, 
+      catId: string, 
+      catName: string, 
+      time: number
+    ) => {
+      let catGroup = targetMap.get(key);
+      if (!catGroup) {
+        catGroup = new Map<string, CandidateStats>();
+        targetMap.set(key, catGroup);
+      }
+      const existing = catGroup.get(catId);
+      if (existing) {
+        existing.count += 1;
+        if (time > existing.latestTime) existing.latestTime = time;
+      } else {
+        catGroup.set(catId, { count: 1, latestTime: time, name: catName, id: catId });
+      }
+    };
 
     const values = res[0].values;
-    // Iterate to index the most recent categorization
     values.forEach((row: any[]) => {
       const desc = String(row[0] || '').trim().toLowerCase();
       const acc = String(row[1] || '').trim().toLowerCase();
@@ -1056,31 +1083,49 @@ export const getHistoricalCategoryLookup = (): HistoricalCategoryLookup => {
       const type = String(row[3] || '').trim().toLowerCase();
       const catName = String(row[4] || '').trim();
       const catId = String(row[5] || '');
+      const rawDate = row[6];
+      const time = rawDate ? new Date(rawDate).getTime() : 0;
 
-      if (!desc || !catName) return;
-
-      const matchObj: HistoricalCategoryMatch = { name: catName, id: catId };
+      if (!desc || !catName || !catId) return;
 
       const key1 = `${desc}|${acc}|${amtKey}|${type}`;
-      if (!byDescAccAmtType.has(key1)) {
-        byDescAccAmtType.set(key1, matchObj);
-      }
+      recordCandidate(map1, key1, catId, catName, time);
 
       const key2 = `${desc}|${acc}|${type}`;
-      if (!byDescAccType.has(key2)) {
-        byDescAccType.set(key2, matchObj);
-      }
+      recordCandidate(map2, key2, catId, catName, time);
 
       const key3 = `${desc}|${type}`;
-      if (!byDescType.has(key3)) {
-        byDescType.set(key3, matchObj);
-      }
+      recordCandidate(map3, key3, catId, catName, time);
 
       const key4 = desc;
-      if (!byDesc.has(key4)) {
-        byDesc.set(key4, matchObj);
-      }
+      recordCandidate(map4, key4, catId, catName, time);
     });
+
+    // Resolve best candidate per key: highest frequency of occurrence first, tie-break by most recent date
+    const resolveBest = (targetMap: Map<string, Map<string, CandidateStats>>): Map<string, HistoricalCategoryMatch> => {
+      const resolved = new Map<string, HistoricalCategoryMatch>();
+      for (const [key, catGroup] of targetMap.entries()) {
+        let best: CandidateStats | null = null;
+        for (const candidate of catGroup.values()) {
+          if (!best) {
+            best = candidate;
+          } else if (candidate.count > best.count) {
+            best = candidate;
+          } else if (candidate.count === best.count && candidate.latestTime > best.latestTime) {
+            best = candidate;
+          }
+        }
+        if (best) {
+          resolved.set(key, { name: best.name, id: best.id });
+        }
+      }
+      return resolved;
+    };
+
+    const byDescAccAmtType = resolveBest(map1);
+    const byDescAccType = resolveBest(map2);
+    const byDescType = resolveBest(map3);
+    const byDesc = resolveBest(map4);
 
     return {
       findMatch: (desc: string, accountName: string, amount: number, type: string): HistoricalCategoryMatch | null => {

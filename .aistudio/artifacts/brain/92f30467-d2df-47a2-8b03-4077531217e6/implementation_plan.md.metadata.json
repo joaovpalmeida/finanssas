@@ -1,6 +1,6 @@
 {
-  "summary": "Implementation plan to reorder category resolution so existing transactions take top priority, followed by categories table matching, and fallback to raw category names or Uncategorized.",
-  "updatedAt": "2026-10-13T23:37:10.901297208Z",
+  "summary": "Updated implementation plan documenting the frequency-based counting with recency tie-breaking in Tier 1 historical category resolution.",
+  "updatedAt": "2026-10-13T23:51:06.242274705Z",
   "requestFeedback": true,
   "userFacing": true
 }
