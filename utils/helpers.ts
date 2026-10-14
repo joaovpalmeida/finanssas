@@ -52,12 +52,44 @@ export const formatDate = (dateString: string, format: string = 'YYYY-MM-DD'): s
     case 'YYYY-MM-DD': return `${y}-${mm}-${dd}`;
     default: 
       // Fallback
-      return `${y}-${mm}-${dd}`;
   }
 };
 
+export const getLocalDateString = (dateInput?: string | Date): string => {
+  if (!dateInput) {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, '0');
+    const d = String(now.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+
+  if (typeof dateInput === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateInput)) {
+    return dateInput;
+  }
+
+  const date = typeof dateInput === 'string' ? new Date(dateInput) : dateInput;
+  if (isNaN(date.getTime())) {
+    if (typeof dateInput === 'string' && /^\d{4}-\d{2}-\d{2}/.test(dateInput)) {
+      return dateInput.substring(0, 10);
+    }
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, '0');
+    const d = String(now.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+};
+
 export const getMonthYearLabel = (dateKey: string): string => {
-  if (!dateKey || dateKey === 'all') return 'All Time';
+  if (!dateKey) return '';
+  if (/^\d{4}$/.test(dateKey)) return dateKey;
+  if (dateKey === 'all') return 'All Time';
   const [year, month] = dateKey.split('-');
   const date = new Date(parseInt(year), parseInt(month) - 1, 1);
   return date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
@@ -69,6 +101,14 @@ export const getFiscalDateRange = (
   transactions: Transaction[] = []
 ): { start: Date | null, end: Date, label: string } => {
   const now = new Date();
+
+  // Full year filter format: YYYY
+  if (/^\d{4}$/.test(filterKey)) {
+    const year = parseInt(filterKey);
+    const start = new Date(year, 0, 1, 0, 0, 0, 0);
+    const end = new Date(year, 11, 31, 23, 59, 59, 999);
+    return { start, end, label: `Year ${year}` };
+  }
 
   if (filterKey === 'all') {
     return { start: null, end: now, label: 'All Time' };

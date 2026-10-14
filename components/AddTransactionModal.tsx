@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useMemo, useId } from 'react';
 import { X, Save, Calendar, Tag, CreditCard, DollarSign, Type, ArrowRightLeft, ArrowUpCircle, ArrowDownCircle, ArrowRight, ChevronDown, List, Plus, Scale } from 'lucide-react';
 import { Transaction, TransactionType, Category, Account } from '../types';
-import { parseAmountInput } from '../utils/helpers';
+import { parseAmountInput, getLocalDateString } from '../utils/helpers';
 
 interface AddTransactionModalProps {
   isOpen: boolean;
@@ -136,7 +136,7 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
   const [toAccountId, setToAccountId] = useState('');
 
   const [formData, setFormData] = useState({
-    date: new Date().toISOString().split('T')[0],
+    date: getLocalDateString(),
     description: '',
     amount: '',
     categoryId: '',
@@ -156,7 +156,7 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
             : amt.toString();
 
         setFormData({
-          date: initialData.date ? new Date(initialData.date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+          date: getLocalDateString(initialData.date),
           description: initialData.description || '',
           amount: formattedAmt,
           // We use initialData.category (the Name) for the input field so it displays correctly in the text input
@@ -171,7 +171,7 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
       } else {
         const defaultAccountId = accounts.length > 0 ? accounts[0].id : '';
         setFormData({
-          date: new Date().toISOString().split('T')[0],
+          date: getLocalDateString(),
           description: '',
           amount: '',
           categoryId: '',
@@ -221,13 +221,27 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
     };
 
     let finalDate: string;
-    if (!isEditing) {
+    if (isEditing && initialData?.date) {
+        const originalLocalDateStr = getLocalDateString(initialData.date);
+        if (formData.date === originalLocalDateStr) {
+            // Date was not modified by the user: preserve original timestamp string untouched
+            finalDate = initialData.date;
+        } else {
+            // User explicitly changed the date in the picker:
+            // Construct timestamp from local year, month, and day to prevent timezone shifts
+            const origDate = new Date(initialData.date);
+            const [year, month, day] = formData.date.split('-').map(Number);
+            const hours = !isNaN(origDate.getTime()) ? origDate.getHours() : 12;
+            const minutes = !isNaN(origDate.getTime()) ? origDate.getMinutes() : 0;
+            const seconds = !isNaN(origDate.getTime()) ? origDate.getSeconds() : 0;
+            const newDate = new Date(year, month - 1, day, hours, minutes, seconds);
+            finalDate = newDate.toISOString();
+        }
+    } else {
         const now = new Date();
         const [year, month, day] = formData.date.split('-').map(Number);
         const dateObj = new Date(year, month - 1, day, now.getHours(), now.getMinutes(), now.getSeconds());
         finalDate = dateObj.toISOString();
-    } else {
-        finalDate = new Date(formData.date).toISOString();
     }
 
     let finalAmount = parseAmountInput(formData.amount, decimalSeparator);

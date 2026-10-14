@@ -84,7 +84,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const [editingBudgetAmount, setEditingBudgetAmount] = useState<string>('');
 
   const refreshBudgets = (month: string) => {
-    if (month && month !== 'all') {
+    if (month && /^\d{4}-\d{2}$/.test(month)) {
       setMonthlyBudgets(getMonthlyBudgets(month));
     } else {
       setMonthlyBudgets([]);
@@ -99,7 +99,22 @@ export const Dashboard: React.FC<DashboardProps> = ({
     setPrivacyMode(savedPrivacy);
   }, []);
 
-  // 2. Extract unique periods for the dropdown
+  // 1. Extract unique years for the dropdown
+  const availableYears = useMemo(() => {
+    const years = new Set<string>();
+    transactions.forEach(t => {
+      const d = new Date(t.date);
+      if (!isNaN(d.getTime())) {
+        years.add(String(d.getFullYear()));
+      }
+    });
+    if (years.size === 0) {
+      years.add(String(new Date().getFullYear()));
+    }
+    return Array.from(years).sort().reverse();
+  }, [transactions]);
+
+  // 2. Extract unique periods for the dropdown (Months)
   const availableMonths = useMemo(() => {
     const dates = new Set<string>();
     
@@ -134,26 +149,31 @@ export const Dashboard: React.FC<DashboardProps> = ({
     return Array.from(dates).sort().reverse(); // Newest first
   }, [transactions, fiscalConfig]);
 
-  // Default filter to the first available period (usually current or latest with data)
-  const [dateFilter, setDateFilter] = useState<string>('all');
+  // Default filter to the period of the most recent transaction (availableMonths[0])
+  const [dateFilter, setDateFilter] = useState<string>(() => {
+    return availableMonths[0] || `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
+  });
+
+  const isMonthlyView = useMemo(() => {
+    return /^\d{4}-\d{2}$/.test(dateFilter);
+  }, [dateFilter]);
 
   // Load budgets when filter changes
   useEffect(() => {
     refreshBudgets(dateFilter);
   }, [dateFilter]);
 
-  // Initialize date filter once availableMonths is ready
+  // Initialize date filter to the most recent transaction period
   useEffect(() => {
-    const now = new Date();
-    const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-    
-    // Default to current month if it exists in data, otherwise the first item (latest)
-    if (availableMonths.includes(currentMonthKey)) {
-        setDateFilter(currentMonthKey);
-    } else if (availableMonths.length > 0) {
-        setDateFilter(availableMonths[0]);
+    if (availableMonths.length > 0) {
+      setDateFilter(prev => {
+        if (prev && (availableMonths.includes(prev) || availableYears.includes(prev))) {
+          return prev;
+        }
+        return availableMonths[0];
+      });
     }
-  }, [availableMonths.length === 1 && availableMonths[0].split('-').length === 2]); // Initial load trigger
+  }, [availableMonths, availableYears]);
 
   // Handle privacy toggle and save
   const togglePrivacy = async () => {
@@ -167,20 +187,19 @@ export const Dashboard: React.FC<DashboardProps> = ({
     setCurrentPage(1);
   }, [dateFilter, transactions, itemsPerPage]);
 
-  // 1. Calculate Date Range based on filter and Fiscal Config
+  // Calculate Date Range based on filter and Fiscal Config
   const { start: dateStart, end: dateEnd, label: dateLabel } = useMemo(() => {
       return getFiscalDateRange(dateFilter, fiscalConfig, transactions);
   }, [dateFilter, fiscalConfig, transactions]);
 
   // Determine if the view is "Current"
   const isCurrentView = useMemo(() => {
-    if (dateFilter === 'all') return true;
     const now = new Date();
     if (dateStart && dateEnd) {
        return now >= dateStart && now <= dateEnd;
     }
     return false;
-  }, [dateFilter, dateStart, dateEnd]);
+  }, [dateStart, dateEnd]);
 
   // 3. Filter transactions based on selection
   const filteredTransactions = useMemo(() => {
@@ -246,7 +265,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   }, [periodSummary, statsTransactions, savingsAccountNames]);
 
   const budgetPerformance = useMemo(() => {
-    if (dateFilter === 'all') return [];
+    if (!isMonthlyView) return [];
 
     return monthlyBudgets.map(mb => {
       const actual = statsTransactions
@@ -266,7 +285,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
         percent
       };
     });
-  }, [monthlyBudgets, statsTransactions, categories, dateFilter]);
+  }, [monthlyBudgets, statsTransactions, categories, isMonthlyView]);
 
   const totalBudgetsValue = useMemo(() => {
     return monthlyBudgets.reduce((sum, b) => sum + b.amount, 0);
@@ -291,7 +310,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   }, [statsTransactions, categories]);
 
   const handleAddBudget = async () => {
-    if (!newBudTypeId || !newBudamt || dateFilter === 'all') return;
+    if (!newBudTypeId || !newBudamt || !isMonthlyView) return;
     try {
       await saveMonthlyBudget({
         id: `mb-${Date.now()}`,
@@ -362,8 +381,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
             </p>
          </div>
          
-         <div className="flex items-center space-x-3">
-            {dateFilter !== 'all' && budgetTypes.length > 0 && (
+          <div className="flex items-center space-x-3">
+            {isMonthlyView && budgetTypes.length > 0 && (
               <button 
                 onClick={() => setShowBudgetPlanner(!showBudgetPlanner)}
                 className={`flex items-center px-4 py-2 text-sm font-bold rounded-lg border transition-all shadow-sm ${showBudgetPlanner ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-700 border-slate-200 hover:text-indigo-600 hover:border-indigo-100'}`}
@@ -398,10 +417,18 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 onChange={(e) => setDateFilter(e.target.value)}
                 className="pl-9 pr-8 py-2 border border-slate-200 rounded-lg text-base sm:text-sm font-medium bg-white focus:ring-2 focus:ring-blue-500 appearance-none shadow-sm text-slate-700 max-w-[200px]"
               >
-                <option value="all">All Time</option>
-                {availableMonths.map(month => (
-                  <option key={month} value={month}>{getMonthYearLabel(month)}</option>
-                ))}
+                {availableYears.length > 0 && (
+                  <optgroup label="Years">
+                    {availableYears.map(year => (
+                      <option key={`year-${year}`} value={year}>{year}</option>
+                    ))}
+                  </optgroup>
+                )}
+                <optgroup label="Months">
+                  {availableMonths.map(month => (
+                    <option key={month} value={month}>{getMonthYearLabel(month)}</option>
+                  ))}
+                </optgroup>
               </select>
               <div className="absolute inset-y-0 right-0 pr-2 flex items-center pointer-events-none">
                 <ChevronDown className="h-4 w-4 text-slate-400" />
@@ -411,7 +438,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
       </div>
 
       {/* Budget Planner Area (Top Dropdown) */}
-      {dateFilter !== 'all' && showBudgetPlanner && (
+      {isMonthlyView && showBudgetPlanner && (
          <div className="bg-white p-6 rounded-xl shadow-sm border-2 border-indigo-100 animate-in slide-in-from-top-2 duration-300">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold text-slate-800 flex items-center">
@@ -590,7 +617,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
         {showCharts && (
           <div className="space-y-6 animate-fade-in">
             {/* Monthly Budget Performance */}
-            {dateFilter !== 'all' && monthlyBudgets.length > 0 && (
+            {isMonthlyView && monthlyBudgets.length > 0 && (
               <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
                 <h3 className="text-lg font-semibold text-slate-800 mb-6 flex items-center">
                   <PiggyBank className="w-5 h-5 mr-2 text-indigo-500" />
