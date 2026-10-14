@@ -1,6 +1,6 @@
 {
-  "summary": "Implementation plan to fix the transaction edit date-shifting bug, default the dashboard period to the most recent transaction, and replace 'All Time' with year-based filtering grouped into Years and Months.",
-  "updatedAt": "2026-10-14T00:25:08.346020157Z",
+  "summary": "Implementation plan to group categories by transaction type in the search page category filter, ordered by Expense, Income, Transfer, and dynamically filtered when a specific transaction type is selected.",
+  "updatedAt": "2026-10-14T00:50:07.571009349Z",
   "requestFeedback": true,
   "userFacing": true
 }

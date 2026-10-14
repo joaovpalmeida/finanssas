@@ -87,6 +87,69 @@ export const TransactionSearch: React.FC<TransactionSearchProps> = ({
     }
   }
 
+  const TYPE_ORDER: string[] = [
+    TransactionType.EXPENSE,
+    TransactionType.INCOME,
+    TransactionType.TRANSFER,
+    TransactionType.BALANCE
+  ];
+
+  // Group and sort categories according to transaction type
+  const groupedCategories = useMemo(() => {
+    // If a type filter is active, only show categories for that type
+    const matchingCategories = filters.type
+      ? categories.filter(c => c.type === filters.type)
+      : categories;
+
+    const groups = new Map<string, Category[]>();
+    for (const cat of matchingCategories) {
+      const typeKey = cat.type || 'Other';
+      if (!groups.has(typeKey)) {
+        groups.set(typeKey, []);
+      }
+      groups.get(typeKey)!.push(cat);
+    }
+
+    // Sort categories alphabetically within each group
+    for (const catList of groups.values()) {
+      catList.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+    }
+
+    // Sort groups: Expense, Income, Transfer, then others
+    const groupKeys = Array.from(groups.keys()).sort((a, b) => {
+      const idxA = TYPE_ORDER.indexOf(a);
+      const idxB = TYPE_ORDER.indexOf(b);
+      if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+      if (idxA !== -1) return -1;
+      if (idxB !== -1) return 1;
+      return a.localeCompare(b);
+    });
+
+    return groupKeys
+      .filter(key => (groups.get(key)?.length || 0) > 0)
+      .map(key => ({
+        type: key,
+        categories: groups.get(key)!
+      }));
+  }, [categories, filters.type]);
+
+  const handleTypeChange = (newType: string) => {
+    setFilters(prev => {
+      let newCategory = prev.category;
+      if (newType && prev.category) {
+        const currentCatObj = categories.find(c => c.name === prev.category);
+        if (currentCatObj && currentCatObj.type !== newType) {
+          newCategory = '';
+        }
+      }
+      return {
+        ...prev,
+        type: newType,
+        category: newCategory
+      };
+    });
+  };
+
   // Calculate pagination
   const totalPages = Math.ceil(results.length / itemsPerPage);
   const paginatedResults = useMemo(() => {
@@ -136,8 +199,12 @@ export const TransactionSearch: React.FC<TransactionSearchProps> = ({
                   className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-base sm:text-sm appearance-none bg-white text-slate-800"
                 >
                   <option value="">All Categories</option>
-                  {categories.map(c => (
-                    <option key={c.id} value={c.name}>{c.name}</option>
+                  {groupedCategories.map(group => (
+                    <optgroup key={group.type} label={group.type}>
+                      {group.categories.map(c => (
+                        <option key={c.id} value={c.name}>{c.name}</option>
+                      ))}
+                    </optgroup>
                   ))}
                 </select>
              </div>
@@ -186,12 +253,12 @@ export const TransactionSearch: React.FC<TransactionSearchProps> = ({
              <label className="block text-xs font-semibold text-slate-500 mb-1">Type</label>
              <select 
                 value={filters.type}
-                onChange={e => setFilters({...filters, type: e.target.value})}
+                onChange={e => handleTypeChange(e.target.value)}
                 className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-base sm:text-sm bg-white text-slate-800"
              >
                 <option value="">All Types</option>
-                <option value="Income">Income</option>
                 <option value="Expense">Expense</option>
+                <option value="Income">Income</option>
                 <option value="Transfer">Transfer</option>
                 <option value="Balance">Balance</option>
              </select>

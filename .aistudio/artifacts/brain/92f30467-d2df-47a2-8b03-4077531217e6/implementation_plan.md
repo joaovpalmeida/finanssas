@@ -1,82 +1,79 @@
-# Dashboard Period & Transaction Date Fixes Plan
+# Category Filter Grouping by Transaction Type
 
-Address three key improvements: default the dashboard period to the most recent transaction's period, replace the "All Time" option with dedicated year filters (grouped by Years and Months), and eliminate timezone date-shifting when editing existing transactions.
+Group categories in the Search page category dropdown by their transaction type using `<optgroup>` elements, with custom ordering and reactive type-filtering.
 
 ## User Review & Critical Decisions
 
 > [!IMPORTANT]
 > The following confirmed decisions guide this update:
 
-- **Confirmed Decision 1 (Default Period)**: In `Dashboard.tsx`, initialize the active period to the most recent transaction's period (`availableMonths[0]`) instead of falling back to the current calendar month.
-- **Confirmed Decision 2 (Year Filtering)**: Replace the "All Time" option in the period selector with dynamic year options extracted from your transactions. The dropdown will be cleanly divided into `<optgroup label="Years">` (e.g. `2026`, `2025`) and `<optgroup label="Months">` (e.g. `October 2026`, `September 2026`).
-- **Confirmed Decision 3 (Monthly Budget Behavior)**: As confirmed, monthly budget planning and performance comparisons will only display on specific monthly views (`YYYY-MM`), keeping full-year views clean and focused on annual totals and category breakdowns.
-- **Confirmed Decision 4 (Transaction Edit Date Preservation)**:
-  - Use local date formatting (`d.getFullYear()`, `d.getMonth() + 1`, `d.getDate()`) when loading `<input type="date">` to prevent UTC offset day shifts.
-  - When saving an edited transaction, if the user did not modify the date, preserve the original `date` timestamp string untouched.
-  - When a date is changed, construct the timestamp from the local year, month, and day to prevent cross-timezone date hopping.
+- **Confirmed Decision 1 (Group by Transaction Type)**: Group categories under distinct `<optgroup label="...">` sections within the Category `<select>` element, keeping `"All Categories"` as the top un-grouped option.
+- **Confirmed Decision 2 (Group Ordering)**: Display groups in the requested priority order: **Expense**, **Income**, **Transfer**, followed by any remaining transaction types. Categories within each group are sorted alphabetically.
+- **Confirmed Decision 3 (Type Filter Synchronization)**: When a transaction Type filter (e.g. "Expense") is selected:
+  - The Category dropdown only displays categories matching that type.
+  - If the previously selected category does not belong to the newly selected type, the category filter is reset to avoid conflicting queries.
+  - When "All Types" is active, all category groups are displayed.
 
 ---
 
-## 1. Overview & Core Concept
+## 1. Overview & User Experience
 
-- **What It Does**:
-  1. **Immediate Relevant Data**: Opening the dashboard displays your most recently recorded financial activity without having to navigate past an empty current month.
-  2. **Annual Financial Analysis**: Selecting a year provides a complete view of annual income, expenses, and savings breakdown.
-  3. **Rock-Solid Transaction Editing**: Modifying an amount or description will never inadvertently change the transaction's recorded date.
-- **Target Audience**: Users managing historical and current transactions across varying timezones and multi-year records.
-
----
-
-## 2. User Experience & Visual Design
-
-- **Dashboard Header Dropdown**:
-  - The period dropdown presents grouped options:
-    - **Years**: Displays all years present in the dataset (descending order). Selecting a year filters transactions from Jan 1 00:00 to Dec 31 23:59:59.
-    - **Months**: Displays all fiscal/calendar months present in the dataset (descending order).
-- **Dashboard Views**:
-  - **Month View**: Displays month stats, charts, and monthly budget comparison.
-  - **Year View**: Displays year-to-date totals, savings rate, and category breakdowns. The monthly budget panel is gracefully hidden.
-- **Edit Modal**:
-  - `<input type="date">` displays the exact calendar date seen in the transaction table.
-  - Editing only the amount retains the identical stored date.
+- **Search Page Filter Section**:
+  - The Category dropdown currently displays a flat, unsorted or semi-sorted list of categories.
+  - With this update, users will see clean visual groups:
+    ```
+    All Categories
+    ▼ Expense
+        Dining Out
+        Groceries
+        Rent
+    ▼ Income
+        Freelance
+        Salary
+    ▼ Transfer
+        Internal Transfer
+        Savings
+    ```
+  - When the user selects "Expense" in the Type dropdown, the Category filter automatically focuses strictly on Expense categories, eliminating visual noise and preventing queries that would yield zero results.
 
 ---
 
-## 3. Technical Architecture & File Changes
+## 2. Technical Architecture & File Changes
 
 ```
-┌────────────────────────────────────────────────────────┐
-│                   utils/helpers.ts                     │
-│ - Update getFiscalDateRange: support 4-digit YYYY      │
-│ - Update getMonthYearLabel: format YYYY as 'Year YYYY' │
-└──────────────────────────┬─────────────────────────────┘
-                           │
-            ┌──────────────┴──────────────┐
-            ▼                             ▼
- ┌──────────────────────┐      ┌───────────────────────────┐
- │ components/Dashboard │      │ components/AddTransaction │
- │ - Default: months[0] │      │ - Local date in input     │
- │ - Grouped select:    │      │ - Preserve date on edit   │
- │   Years & Months     │      │ - Prevent timezone drift  │
- │ - Guard month budgets│      └───────────────────────────┘
- └──────────────────────┘
+┌────────────────────────────────────────────────────────────────────────┐
+│                   components/TransactionSearch.tsx                     │
+│                                                                        │
+│ - groupedCategories (useMemo):                                         │
+│     * Filter categories by filters.type if specified                   │
+│     * Group by category.type                                           │
+│     * Sort groups: Expense -> Income -> Transfer -> others             │
+│     * Sort category names alphabetically within each group             │
+│                                                                        │
+│ - Category Filter Select:                                              │
+│     * Render <option value="">All Categories</option>                  │
+│     * Map over ordered groups and render <optgroup label={type}>       │
+│                                                                        │
+│ - Type Filter Effect:                                                  │
+│     * When filters.type changes, if active category is not of that     │
+│       type, reset filters.category to ''                               │
+└────────────────────────────────────────────────────────────────────────┘
 ```
 
 ### Proposed Execution Steps:
 
-1. **`utils/helpers.ts`**:
-   - Add support for 4-digit year strings (`/^\d{4}$/`) in `getFiscalDateRange`: return `{ start: Jan 1, end: Dec 31, label: 'Year YYYY' }`.
-   - Update `getMonthYearLabel` to return `dateKey` directly if it is a year.
-2. **`components/Dashboard.tsx`**:
-   - Change `availableYears` calculation to gather unique years from `transactions`.
-   - Update `dateFilter` initial state and initialization effect to select `availableMonths[0]` as the default period.
-   - Group the `<select>` dropdown into `<optgroup label="Years">` and `<optgroup label="Months">`.
-   - Guard budget performance and Add Budget button with `isMonthlyView` (`/^\d{4}-\d{2}$/.test(dateFilter)`).
-3. **`components/AddTransactionModal.tsx`**:
-   - Add a `getLocalDateString` helper to format local date components (`YYYY-MM-DD`) for `<input type="date">`.
-   - On edit submission, check if `formData.date === getLocalDateString(initialData.date)`: if true, preserve `initialData.date` untouched.
-   - If the user modified the date, construct the timestamp from local date parts to prevent timezone offsets.
-4. **Verification**:
+1. **`components/TransactionSearch.tsx`**:
+   - Define type ordering priority: `const TYPE_ORDER = ['Expense', 'Income', 'Transfer', 'Balance'];`.
+   - Implement `groupedCategories` `useMemo`:
+     - Filter `categories` by `filters.type` if `filters.type` is set.
+     - Group categories by their `type` field (fallback to `'Other'` if missing).
+     - Sort categories alphabetically by `name` within each group.
+     - Return an ordered array of `[typeName, categoryList]`.
+   - Add a `useEffect` on `filters.type`:
+     - If `filters.type` is set and `filters.category` is set, check if the selected category belongs to the new type. If not, reset `category` to `''`.
+   - Update the Category `<select>` element to render `<optgroup label={type}>` with child `<option>` elements.
+
+2. **Verification**:
    - Run `lint_applet` (`tsc --noEmit`).
    - Run `compile_applet` (`npm run build`).
-   - Restart dev server and verify.
+   - Restart development server.
