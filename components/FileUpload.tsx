@@ -1,10 +1,11 @@
 
 import React, { useCallback, useState, useMemo, useEffect } from 'react';
-import { Upload, FileSpreadsheet, Loader2, AlertCircle, ArrowRight, Settings, Layers, ChevronRight, ArrowLeft, Table, Calendar, Columns, ArrowDownToLine, ArrowUpFromLine, Eye, Type, Tag, CheckSquare, Square, AlertTriangle, Edit2, Copy, X, Sparkles, List, Save, Bookmark, CheckCircle } from 'lucide-react';
+import { Upload, FileSpreadsheet, Loader2, AlertCircle, ArrowRight, Settings, Layers, ChevronRight, ArrowLeft, Table, Calendar, Columns, ArrowDownToLine, ArrowUpFromLine, Eye, Type, Tag, CheckSquare, Square, AlertTriangle, Edit2, Sparkles, Bookmark, CheckCircle } from 'lucide-react';
 import { getExcelColumns, getExcelSheetNames, parseExcelFile, ColumnMapping, ExcelColumn } from '../utils/excelParser';
 import { Transaction, Category, Account, ImportTemplate } from '../types';
 import { formatCurrency, generateTransactionSignature } from '../utils/helpers';
-import { getExistingSignatures, saveImportConfig, getImportConfig, getCategorySuggestions, getImportTemplates, saveImportTemplate, getHistoricalCategoryLookup, getCategories } from '../services/db';
+import { getExistingSignatures, getImportTemplates, saveImportTemplate, getHistoricalCategoryLookup, getCategories } from '../services/db';
+import { BulkRenameModal } from './BulkRenameModal';
 
 interface FileUploadProps {
   onUpload: (data: Transaction[]) => void;
@@ -634,40 +635,14 @@ export const FileUpload: React.FC<FileUploadProps> = ({
          </datalist>
 
          {pendingBulkRename && (
-            <div className="absolute inset-0 z-50 flex items-center justify-center bg-slate-900/50 rounded-xl backdrop-blur-sm p-4">
-                <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-sm animate-scale-in">
-                    <h4 className="text-lg font-bold text-slate-800 mb-3 flex items-center">
-                        <Copy className="w-5 h-5 mr-2 text-blue-600" />
-                        Apply to all?
-                    </h4>
-                    <p className="text-sm text-slate-600 mb-4">
-                        You renamed <strong>"{pendingBulkRename.oldName}"</strong> to <strong>"{pendingBulkRename.newName}"</strong>.
-                        <br/><br/>
-                        There are <strong>{pendingBulkRename.count}</strong> other transactions with this category.
-                        Do you want to update them all?
-                    </p>
-                    <div className="flex flex-col gap-2">
-                        <button
-                            onClick={() => applyRename(pendingBulkRename.targetId, pendingBulkRename.newName, true, pendingBulkRename.oldName)}
-                            className="w-full py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors text-sm"
-                        >
-                            Yes, Update All ({pendingBulkRename.count + 1})
-                        </button>
-                        <button
-                            onClick={() => applyRename(pendingBulkRename.targetId, pendingBulkRename.newName, false)}
-                            className="w-full py-2 bg-slate-100 text-slate-700 rounded-lg font-medium hover:bg-slate-200 transition-colors text-sm"
-                        >
-                            No, Only This One
-                        </button>
-                        <button
-                            onClick={() => setPendingBulkRename(null)}
-                            className="w-full py-2 text-slate-400 hover:text-slate-600 text-xs font-medium"
-                        >
-                            Cancel
-                        </button>
-                    </div>
-                </div>
-            </div>
+            <BulkRenameModal
+              oldName={pendingBulkRename.oldName}
+              newName={pendingBulkRename.newName}
+              count={pendingBulkRename.count}
+              onConfirmAll={() => applyRename(pendingBulkRename.targetId, pendingBulkRename.newName, true, pendingBulkRename.oldName)}
+              onConfirmSingle={() => applyRename(pendingBulkRename.targetId, pendingBulkRename.newName, false)}
+              onCancel={() => setPendingBulkRename(null)}
+            />
          )}
 
          <div className="flex items-center justify-between mb-4">

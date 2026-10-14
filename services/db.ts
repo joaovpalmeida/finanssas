@@ -44,6 +44,7 @@ export const initDB = async (): Promise<DBStatus> => {
         db = new SQL.Database();
         db.run("PRAGMA foreign_keys = ON;"); 
         initSchema();
+        await saveDB();
     }
 
     return 'READY';
@@ -102,6 +103,7 @@ const initSchema = () => {
       name TEXT,
       type TEXT,
       group_name TEXT,
+      budget_type_id TEXT,
       UNIQUE(name, type)
     );
 
@@ -116,6 +118,11 @@ const initSchema = () => {
       FOREIGN KEY(category_id) REFERENCES categories(id) ON DELETE SET NULL,
       FOREIGN KEY(account_id) REFERENCES accounts(id) ON DELETE CASCADE
     );
+
+    CREATE INDEX IF NOT EXISTS idx_transactions_date ON transactions(date);
+    CREATE INDEX IF NOT EXISTS idx_transactions_category_id ON transactions(category_id);
+    CREATE INDEX IF NOT EXISTS idx_transactions_account_id ON transactions(account_id);
+    CREATE INDEX IF NOT EXISTS idx_transactions_desc ON transactions(description);
 
     CREATE TABLE IF NOT EXISTS savings_goals (
       id TEXT PRIMARY KEY,
@@ -152,24 +159,15 @@ const initSchema = () => {
     );
   `;
   db.run(sql);
-  saveDB();
 };
 
 const migrateSchema = () => {
   if (!db) return;
   
-  // 1. Ensure basic tables exist
+  // 1. Ensure basic tables and base indexes exist
   initSchema();
 
   try {
-    // Check for import_templates table specifically as it might be new
-    db.run(`CREATE TABLE IF NOT EXISTS import_templates (
-      id TEXT PRIMARY KEY,
-      name TEXT UNIQUE,
-      amount_mode TEXT,
-      mapping_json TEXT
-    )`);
-
     // 2. Check schema evolution for 'transactions' table
     const res = db.exec("PRAGMA table_info(transactions)");
     if (res.length > 0) {
@@ -214,6 +212,12 @@ const migrateSchema = () => {
             db.run("ALTER TABLE categories ADD COLUMN budget_type_id TEXT");
         }
     }
+
+    // 4. Ensure performance indexes exist on existing databases
+    db.run(`CREATE INDEX IF NOT EXISTS idx_transactions_date ON transactions(date)`);
+    db.run(`CREATE INDEX IF NOT EXISTS idx_transactions_category_id ON transactions(category_id)`);
+    db.run(`CREATE INDEX IF NOT EXISTS idx_transactions_account_id ON transactions(account_id)`);
+    db.run(`CREATE INDEX IF NOT EXISTS idx_transactions_desc ON transactions(description)`);
     
     saveDB();
   } catch (e) {

@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Download, Trash2, Settings, Tag, CreditCard, Edit2, Save, X, UploadCloud, AlertTriangle, Upload, Wand2, Key, PiggyBank, Plus, CalendarRange, Lock, Unlock, Hash, Calendar, Bookmark } from 'lucide-react';
+import { Download, Trash2, Settings, Tag, CreditCard, Edit2, Save, X, UploadCloud, AlertTriangle, Upload, Wand2, Key, PiggyBank, Plus, CalendarRange, Lock, Unlock, Bookmark } from 'lucide-react';
 import { SqlConsole } from './SqlConsole';
 import { FileUpload } from './FileUpload';
 import { getAccounts, getCategories, updateAccount, updateCategory, createCategory, deleteCategory, deleteAccount, getTransactionCount, generateDummyData, getApiKey, saveApiKey, createAccount, getFiscalConfig, saveFiscalConfig, isDatabaseEncrypted, setDatabasePassword, removeDatabasePassword, saveImportConfig, getImportTemplates, deleteImportTemplate, getBudgetTypes, createBudgetType, deleteBudgetType, updateBudgetType, assignCategoriesToBudget } from '../services/db';
